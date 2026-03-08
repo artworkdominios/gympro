@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+/* QSTGYM - Dark Mode Neón Theme */
+@theme {
+  /* Fondo principal */
+  --color-bg-primary: #050505;
+  --color-bg-secondary: #0a0a0a;
+  --color-bg-card: #0f0f0f;
+  
+  /* Acentos rojos neón */
+  --color-neon: #FF3131;
+  --color-neon-dim: #cc2727;
+  --color-neon-bright: #ff4d4d;
+  
+  /* Glow / Resplandor */
+  --shadow-glow: 0 0 20px rgba(255, 49, 49, 0.4);
+  --shadow-glow-strong: 0 0 30px rgba(255, 49, 49, 0.6);
+  --shadow-glow-subtle: 0 0 10px rgba(255, 49, 49, 0.2);
+  
+  /* Texto */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a0a0a0;
+  --color-text-muted: #666666;
+}
+
+@layer base {
+  body {
+    @apply bg-[#050505] text-white antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* Utilidades de glow para componentes */
+@layer utilities {
+  .glow-neon {
+    box-shadow: 0 0 20px rgba(255, 49, 49, 0.4);
+  }
+  .glow-neon-strong {
+    box-shadow: 0 0 30px rgba(255, 49, 49, 0.6);
+  }
+  .glow-neon-subtle {
+    box-shadow: 0 0 10px rgba(255, 49, 49, 0.2);
+  }
+  .text-glow {
+    text-shadow: 0 0 10px rgba(255, 49, 49, 0.5);
+  }
+  .border-neon {
+    border-color: #FF3131;
+    box-shadow: 0 0 15px rgba(255, 49, 49, 0.3);
+  }
+}
