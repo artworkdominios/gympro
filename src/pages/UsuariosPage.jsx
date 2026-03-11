@@ -1,20 +1,30 @@
 import { useState, useEffect } from 'react';
-import { User, Mail, Lock, Key, RefreshCcw } from 'lucide-react';
-import { auth, db } from '../lib/firebase'; 
-import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, setDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { User, Mail, Lock, Key, RefreshCcw, CreditCard, Search, ShieldAlert, Trash2 } from 'lucide-react'; 
+import { db, auth } from '../lib/firebase'; 
+import { createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, getAuth } from 'firebase/auth';
+import { doc, setDoc, collection, getDocs, query, orderBy, where, deleteDoc } from 'firebase/firestore';
+import { initializeApp, getApps } from 'firebase/app';
+
+// EXTRAEMOS LA CONFIGURACIÓN DEL AUTH YA INICIALIZADO
+const firebaseConfig = auth.app.options;
+
+// Inicializamos la app secundaria (esto evita que se te cierre la sesión de admin)
+const secondaryApp = getApps().find(app => app.name === "Secondary") 
+                     || initializeApp(firebaseConfig, "Secondary");
+const secondaryAuth = getAuth(secondaryApp);
 
 export default function UsuariosPage() {
   const [loading, setLoading] = useState(false);
-  const [usuarios, setUsuarios] = useState([]); // Estado para la lista de usuarios
+  const [usuarios, setUsuarios] = useState([]); 
+  const [busqueda, setBusqueda] = useState('');
   const [formData, setFormData] = useState({
     nombre: '',
+    dni: '',
     email: '',
     password: '',
     role: 'alumno'
   });
 
-  // 1. Función para obtener los usuarios de Firestore
   const fetchUsuarios = async () => {
     try {
       const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
@@ -33,128 +43,199 @@ export default function UsuariosPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-      const user = userCredential.user;
 
-      await setDoc(doc(db, "users", user.uid), {
+    try {
+      const qDni = query(collection(db, "users"), where("dni", "==", formData.dni));
+      const dniCheck = await getDocs(qDni);
+      if (!dniCheck.empty) {
+        throw new Error("Este DNI ya está registrado.");
+      }
+
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, formData.email, formData.password);
+      const newUser = userCredential.user;
+
+      await setDoc(doc(db, "users", newUser.uid), {
         nombre: formData.nombre.toUpperCase(),
+        dni: formData.dni,
         email: formData.email,
         role: formData.role,
         createdAt: new Date()
       });
 
-      alert(`¡ÉXITO! Usuario ${formData.nombre} creado.`);
-      setFormData({ nombre: '', email: '', password: '', role: 'alumno' });
-      fetchUsuarios(); // Recargamos la lista automáticamente
+      await signOut(secondaryAuth);
+
+      alert(`¡ÉXITO! ${formData.nombre} registrado.`);
+      setFormData({ nombre: '', dni: '', email: '', password: '', role: 'alumno' });
+      fetchUsuarios(); 
     } catch (err) {
-      alert("Error al crear: " + err.message);
+      alert("Error: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // 2. FUNCIÓN PARA RESETEAR CONTRASEÑA
   const handleResetPassword = async (email) => {
     if (!window.confirm(`¿Enviar correo de recuperación a ${email}?`)) return;
-    
     try {
       await sendPasswordResetEmail(auth, email);
-      alert("Email de restablecimiento enviado. El usuario deberá seguir las instrucciones en su correo.");
+      alert("Email enviado.");
     } catch (err) {
       alert("Error: " + err.message);
     }
   };
 
+  // NUEVA FUNCIÓN PARA ELIMINAR DE FIRESTORE
+  const handleDelete = async (id, nombre) => {
+    if (!window.confirm(`¿ESTÁS SEGURO? Vas a eliminar a ${nombre} de la base de datos. Esta acción no se puede deshacer.`)) return;
+    
+    try {
+      await deleteDoc(doc(db, "users", id));
+      alert("Usuario eliminado de la base de datos.");
+      fetchUsuarios();
+    } catch (err) {
+      alert("Error al eliminar: " + err.message);
+    }
+  };
+
+  const usuariosFiltrados = usuarios.filter(u => 
+    u.nombre?.toLowerCase().includes(busqueda.toLowerCase()) || 
+    u.dni?.includes(busqueda) || 
+    u.email?.toLowerCase().includes(busqueda.toLowerCase())
+  );
+
   return (
-    <div className="max-w-6xl animate-in fade-in duration-500">
-      <header className="mb-8">
-        <h1 className="text-4xl font-black italic text-white uppercase tracking-tighter">
-          Gestión de <span className="text-[#FF3131]">Usuarios</span>
-        </h1>
+    <div className="max-w-6xl animate-in fade-in duration-500 mx-auto p-4">
+      <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        <div>
+          <h1 className="text-4xl font-black italic text-white uppercase tracking-tighter">
+            Gestión de <span className="text-[#FF3131]">Usuarios</span>
+          </h1>
+          <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mt-1">Admin Panel QSTGYM</p>
+        </div>
+        <div className="flex items-center gap-2 bg-[#FF3131]/10 px-4 py-2 rounded-xl border border-[#FF3131]/20">
+          <ShieldAlert size={14} className="text-[#FF3131]" />
+          <span className="text-[10px] text-white font-black uppercase italic">Sesión Administrador</span>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
-        {/* COLUMNA IZQUIERDA: FORMULARIO */}
-        <form onSubmit={handleSubmit} className="bg-[#0a0a0a] border border-white/5 p-8 rounded-2xl space-y-6 h-fit">
-          <h2 className="text-white font-black uppercase text-sm italic border-l-4 border-[#FF3131] pl-3">Registrar Nuevo</h2>
+        {/* FORMULARIO */}
+        <form onSubmit={handleSubmit} className="bg-[#0a0a0a] border border-white/5 p-8 rounded-3xl space-y-6 h-fit shadow-2xl">
+          <h2 className="text-white font-black uppercase text-sm italic border-l-4 border-[#FF3131] pl-3">Alta de Usuario</h2>
+          
           <div className="space-y-4">
-            <div>
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Nombre</label>
-              <div className="relative mt-2">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={18} />
-                <input type="text" value={formData.nombre} className="w-full bg-black border border-white/10 rounded-xl py-3 pl-10 text-white outline-none focus:border-[#FF3131]" placeholder="NOMBRE" onChange={(e) => setFormData({...formData, nombre: e.target.value})} required />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-gray-500 ml-1 tracking-tighter">Nombre Completo</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
+                  <input type="text" value={formData.nombre} className="w-full bg-black border border-white/10 rounded-xl py-4 pl-10 text-white text-xs font-bold outline-none focus:border-[#FF3131]" placeholder="NOMBRE" onChange={(e) => setFormData({...formData, nombre: e.target.value})} required />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-gray-500 ml-1 tracking-tighter">DNI</label>
+                <div className="relative">
+                  <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
+                  <input type="text" value={formData.dni} className="w-full bg-black border border-white/10 rounded-xl py-4 pl-10 text-white text-xs font-bold outline-none focus:border-[#FF3131]" placeholder="DNI" onChange={(e) => setFormData({...formData, dni: e.target.value})} required />
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Email</label>
-              <div className="relative mt-2">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={18} />
-                <input type="email" value={formData.email} className="w-full bg-black border border-white/10 rounded-xl py-3 pl-10 text-white outline-none focus:border-[#FF3131]" placeholder="EMAIL" onChange={(e) => setFormData({...formData, email: e.target.value})} required />
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-gray-500 ml-1 tracking-tighter">Email de acceso</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
+                <input type="email" value={formData.email} className="w-full bg-black border border-white/10 rounded-xl py-4 pl-10 text-white text-xs font-bold outline-none focus:border-[#FF3131]" placeholder="EMAIL" onChange={(e) => setFormData({...formData, email: e.target.value})} required />
               </div>
             </div>
 
-            <div>
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Contraseña Temporal</label>
-              <div className="relative mt-2">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={18} />
-                <input type="password" value={formData.password} className="w-full bg-black border border-white/10 rounded-xl py-3 pl-10 text-white outline-none focus:border-[#FF3131]" placeholder="MÍN. 6 CARACTERES" onChange={(e) => setFormData({...formData, password: e.target.value})} required />
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-gray-500 ml-1 tracking-tighter">Contraseña Temporal</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
+                <input type="password" value={formData.password} className="w-full bg-black border border-white/10 rounded-xl py-4 pl-10 text-white text-xs font-bold outline-none focus:border-[#FF3131]" placeholder="MÍN. 6 CARACTERES" onChange={(e) => setFormData({...formData, password: e.target.value})} required />
               </div>
             </div>
           </div>
 
-          <div>
-            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Rol</label>
-            <div className="grid grid-cols-2 gap-2 mt-2">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-gray-500 ml-1 tracking-tighter">Asignar Rol</label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {['administrador', 'manager', 'profesor', 'alumno'].map((r) => (
-                <button key={r} type="button" onClick={() => setFormData({...formData, role: r})} className={`p-2 rounded-lg text-[9px] font-bold uppercase border transition-all ${formData.role === r ? 'bg-[#FF3131] border-[#FF3131] text-white' : 'bg-black border-white/5 text-gray-500 hover:border-white/20'}`}>
+                <button key={r} type="button" onClick={() => setFormData({...formData, role: r})} className={`p-2.5 rounded-xl text-[8px] font-black uppercase border transition-all ${formData.role === r ? 'bg-[#FF3131] border-[#FF3131] text-white shadow-lg' : 'bg-black border-white/5 text-gray-600 hover:border-white/20'}`}>
                   {r}
                 </button>
               ))}
             </div>
           </div>
 
-          <button type="submit" disabled={loading} className="w-full bg-white text-black font-black py-4 rounded-xl uppercase italic hover:bg-[#FF3131] hover:text-white transition-all">
-            {loading ? 'CREANDO...' : 'CREAR USUARIO'}
+          <button type="submit" disabled={loading} className="w-full bg-white text-black font-black py-5 rounded-2xl uppercase italic hover:bg-[#FF3131] hover:text-white transition-all transform active:scale-95 shadow-xl shadow-white/5">
+            {loading ? 'REGISTRANDO...' : 'CREAR USUARIO 🔥'}
           </button>
         </form>
 
-        {/* COLUMNA DERECHA: LISTADO Y ACCIONES */}
-        <div className="bg-[#0a0a0a] border border-white/5 rounded-2xl flex flex-col overflow-hidden h-[600px]">
-          <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/5">
-            <h2 className="text-white font-black uppercase text-xs italic tracking-widest">Usuarios en Sistema</h2>
-            <button onClick={fetchUsuarios} className="text-gray-500 hover:text-white transition-colors">
-              <RefreshCcw size={16} />
-            </button>
+        {/* LISTADO CON BUSCADOR */}
+        <div className="bg-[#0a0a0a] border border-white/5 rounded-3xl flex flex-col overflow-hidden h-[700px] shadow-2xl">
+          <div className="p-6 border-b border-white/5 bg-white/5 space-y-4">
+            <div className="flex justify-between items-center px-1">
+              <h2 className="text-white font-black uppercase text-[10px] italic tracking-widest text-gray-400">Usuarios Activos</h2>
+              <button onClick={fetchUsuarios} className="text-gray-500 hover:text-[#FF3131] transition-all"><RefreshCcw size={16} /></button>
+            </div>
+            
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#FF3131]" size={18} />
+              <input 
+                type="text" 
+                placeholder="BUSCAR NOMBRE, DNI O EMAIL..." 
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white text-[10px] font-black uppercase outline-none focus:border-[#FF3131]"
+              />
+            </div>
           </div>
           
           <div className="overflow-y-auto flex-1 custom-scrollbar">
-            {usuarios.map((u) => (
-              <div key={u.id} className="p-4 border-b border-white/5 hover:bg-white/[0.02] flex items-center justify-between group">
-                <div className="flex flex-col">
-                  <span className="text-white font-bold text-sm uppercase tracking-tight">{u.nombre}</span>
-                  <span className="text-gray-500 text-[10px] lowercase">{u.email}</span>
-                  <div className="mt-1">
-                    <span className="px-2 py-0.5 rounded bg-[#FF3131]/10 text-[#FF3131] text-[8px] font-black uppercase border border-[#FF3131]/20">
-                      {u.role}
-                    </span>
+            {usuariosFiltrados.length > 0 ? (
+              usuariosFiltrados.map((u) => (
+                <div key={u.id} className="p-5 border-b border-white/5 hover:bg-white/[0.02] flex items-center justify-between group transition-all">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-white font-bold text-sm uppercase tracking-tight group-hover:text-[#FF3131] transition-colors">{u.nombre}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-600 text-[10px] font-medium">{u.email}</span>
+                      <span className="text-gray-400 text-[9px] font-black uppercase italic bg-white/5 px-2 py-0.5 rounded">DNI: {u.dni || 'S/D'}</span>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-lg bg-[#FF3131]/10 text-[#FF3131] text-[8px] font-black uppercase border border-[#FF3131]/20">
+                        {u.role}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleResetPassword(u.email)} 
+                      className="p-3 bg-orange-500/10 text-orange-500 rounded-xl hover:bg-orange-500 hover:text-white transition-all transform hover:rotate-6"
+                      title="Reset Password"
+                    >
+                      <Key size={18} />
+                    </button>
+                    
+                    <button 
+                      onClick={() => handleDelete(u.id, u.nombre)} 
+                      className="p-3 bg-[#FF3131]/10 text-[#FF3131] rounded-xl hover:bg-[#FF3131] hover:text-white transition-all transform hover:-rotate-6"
+                      title="Eliminar Usuario"
+                    >
+                      <Trash2 size={18} />
+                    </button>
                   </div>
                 </div>
-                
-                <button 
-                  onClick={() => handleResetPassword(u.email)}
-                  className="p-3 bg-orange-500/10 text-orange-500 rounded-xl hover:bg-orange-500 hover:text-white transition-all shadow-lg"
-                  title="Resetear Contraseña"
-                >
-                  <Key size={16} />
-                </button>
-              </div>
-            ))}
+              ))
+            ) : (
+              <div className="p-20 text-center text-gray-800 font-black uppercase italic text-xs tracking-widest">Sin resultados</div>
+            )}
           </div>
         </div>
-
       </div>
     </div>
   );

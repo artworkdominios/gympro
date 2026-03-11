@@ -1,0 +1,58 @@
+import { CheckCircle2, Circle, Timer, Weight } from 'lucide-react';
+import GymCard from './GymCard.jsx';
+
+export default function ExerciseItem({ ejercicio, isDone, onToggle }) {
+  const { nombre, grupo, s, r, d, p } = ejercicio;
+
+  return (
+    <GymCard
+      // Cambiamos: Borde Rojo si está pendiente, Verde si está hecho
+      className={`group transition-all duration-300 cursor-pointer border-2 ${
+        isDone
+          ? 'bg-green-500/5 border-green-500/40 shadow-[inset_0_0_20px_rgba(49,255,49,0.05)]'
+          : 'bg-[#0a0a0a] border-brandRed/30 shadow-[0_0_15px_rgba(255,49,49,0.1)] hover:border-brandRed'
+      }`}
+      onClick={onToggle}
+    >
+      <div className="flex justify-between items-start mb-5">
+        <div>
+          <h3 className={`text-xl font-black italic uppercase transition-all ${
+              isDone ? 'text-gray-600 line-through opacity-50' : 'text-white'
+            }`}
+          >
+            {nombre}
+          </h3>
+          <p className="text-brandRed text-[9px] font-black uppercase tracking-widest opacity-80">
+            {grupo}
+          </p>
+        </div>
+        <div className={`p-1 rounded-full transition-colors ${
+            isDone ? 'bg-[#31FF31]' : 'bg-white/5'
+          }`}
+        >
+          {isDone ? (
+            <CheckCircle2 className="text-black" size={20} />
+          ) : (
+            <Circle className="text-gray-800" size={20} />
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 gap-2">
+        {/* Usamos un color más neutro para los datos técnicos */}
+        {[
+          { label: 'Series', val: s, icon: null },
+          { label: 'Reps', val: r, icon: null },
+          { label: 'Desc', val: d || '-', icon: <Timer size={10} className="text-brandRed mb-1 opacity-50" /> },
+          { label: 'Peso', val: p || '-', icon: <Weight size={10} className="text-brandRed mb-1" /> }
+        ].map((stat, i) => (
+          <div key={i} className="bg-white/5 p-2.5 rounded-2xl text-center border border-white/5 flex flex-col items-center justify-center">
+            <p className="text-gray-600 text-[7px] font-black uppercase mb-1">{stat.label}</p>
+            {stat.icon}
+            <p className="text-white font-black text-[10px]">{stat.val}</p>
+          </div>
+        ))}
+      </div>
+    </GymCard>
+  );
+}

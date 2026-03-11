@@ -5,9 +5,8 @@ import {
   ClipboardList, 
   LogOut, 
   Home, 
-  Settings, 
-  User,
-  Activity 
+  Activity,
+  Library // <--- Importamos este para la biblioteca
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -22,6 +21,7 @@ export default function Sidebar() {
       { name: 'Inicio', icon: <Home size={20}/>, path: '/' },
       { name: 'Alumnos', icon: <Users size={20}/>, path: '/alumnos' },
       { name: 'Rutinas', icon: <ClipboardList size={20}/>, path: '/rutinas' },
+      { name: 'Biblioteca', icon: <Library size={20}/>, path: '/ejercicios' }, // <--- AGREGADO
       { name: 'Staff', icon: <Users size={20}/>, path: '/staff' },
       { name: 'Reg', icon: <Activity size={20}/>, path: '/log-actividad'},
     ],
@@ -29,18 +29,20 @@ export default function Sidebar() {
       { name: 'Inicio', icon: <Home size={20}/>, path: '/' },
       { name: 'Alumnos', icon: <Users size={20}/>, path: '/alumnos' },
       { name: 'Rutinas', icon: <ClipboardList size={20}/>, path: '/rutinas' },
+      { name: 'Biblioteca', icon: <Library size={20}/>, path: '/ejercicios' }, // <--- AGREGADO
       { name: 'Reg', icon: <Activity size={20}/>, path: '/log-actividad'},
     ],
     profesor: [
       { name: 'Inicio', icon: <Home size={20}/>, path: '/' },
       { name: 'Alumnos', icon: <Users size={20}/>, path: '/alumnos' },
       { name: 'Rutinas', icon: <ClipboardList size={20}/>, path: '/rutinas' },
+      { name: 'Biblioteca', icon: <Library size={20}/>, path: '/ejercicios' }, // <--- AGREGADO
       { name: 'Reg', icon: <Activity size={20}/>, path: '/log-actividad'},
     ],
     alumno: [
       { name: 'Inicio', icon: <Home size={20}/>, path: '/' },
       { name: 'Rutina', icon: <Dumbbell size={20}/>, path: '/mi-rutina' },
-      { name: 'Perfil', icon: <User size={20}/>, path: '/perfil' },
+      { name: 'Perfil', icon: <Activity size={20}/>, path: '/perfil' },
     ]
   };
 
@@ -48,9 +50,10 @@ export default function Sidebar() {
     ? menuConfig.administrador 
     : (menuConfig[role] || menuConfig.alumno);
 
+  // ... (Resto del código del componente sigue igual)
   return (
     <>
-      {/* --- SIDEBAR PARA DESKTOP (PC) --- */}
+      {/* --- SIDEBAR PARA DESKTOP --- */}
       <div className="hidden md:flex w-64 bg-[#0a0a0a] border-r border-[#FF3131]/20 p-6 flex-col h-screen sticky top-0 z-50">
         <div className="mb-10">
           <h1 className="text-[#FF3131] text-3xl font-black italic tracking-tighter uppercase leading-none">QST<br/>GYM</h1>
@@ -86,9 +89,9 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* --- MENU INFERIOR PARA MÓVIL (Mobile Nav) --- */}
+      {/* --- MENU INFERIOR PARA MÓVIL --- */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0a0a0a]/90 backdrop-blur-lg border-t border-[#FF3131]/20 px-2 py-3 z-[100] flex justify-around items-center">
-        {currentMenu.slice(0, 4).map((item) => { // Limitamos a 4 items para que no se amontonen
+        {currentMenu.slice(0, 5).map((item) => { // Aumenté a 5 para que entre la Biblioteca en mobile si hay espacio
           const isActive = location.pathname === item.path;
           return (
             <Link 
@@ -103,10 +106,6 @@ export default function Sidebar() {
             </Link>
           );
         })}
-        <button onClick={logout} className="flex flex-col items-center gap-1 px-3 py-1 text-gray-500">
-          <LogOut size={20} />
-          <span className="text-[9px] font-black uppercase tracking-tighter">Salir</span>
-        </button>
       </div>
     </>
   );

@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, orderBy, serverTimestamp } from 'firebase/firestore';
-import { Plus, Trash2, X, History, ChevronDown, CheckCircle2, Clock, Weight, Loader2 } from 'lucide-react';
+import { Plus, Trash2, X, History, ChevronDown, CheckCircle2, Loader2, Search, Link as LinkIcon, Info } from 'lucide-react';
+import GymCard from '../components/ui/GymCard.jsx';
+import GymButton from '../components/ui/GymButton.jsx';
 
 export default function RutinasPage() {
   const { user } = useAuth();
   const role = user?.role?.toLowerCase().trim();
   const esAdmin = role === 'administrador' || role === 'admin';
-  const esStaff = esAdmin || role === 'manager' || role === 'profesor';
-  
+
   const [alumnos, setAlumnos] = useState([]);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
   const [historialRutinas, setHistorialRutinas] = useState([]);
@@ -19,16 +20,24 @@ export default function RutinasPage() {
   const [loading, setLoading] = useState(false);
   const [rutinaExpandida, setRutinaExpandida] = useState(null);
 
+  // Buscadores
+  const [busquedaAlumno, setBusquedaAlumno] = useState('');
+  const [busquedaHistorial, setBusquedaHistorial] = useState('');
+  const [busquedaModal, setBusquedaModal] = useState('');
+
   useEffect(() => {
-    // Cargar alumnos para el selector
+    // Escuchar Alumnos (Traemos el DNI también si existe)
     const qAlumnos = query(collection(db, "users"), where("role", "==", "alumno"));
     const unsubAlumnos = onSnapshot(qAlumnos, (snap) => {
-      const data = snap.docs.map(d => ({ id: d.id, nombre: d.data().nombre }));
+      const data = snap.docs.map(d => ({ 
+        id: d.id, 
+        nombre: d.data().nombre,
+        dni: d.data().dni || 'S/D' // Traemos DNI
+      }));
       setAlumnos(data);
       if (data.length > 0 && !alumnoSeleccionado) setAlumnoSeleccionado(data[0].id);
     });
 
-    // Cargar biblioteca de ejercicios
     const qEj = query(collection(db, "ejercicios"), orderBy("nombre", "asc"));
     const unsubEj = onSnapshot(qEj, (snap) => {
       setBiblioteca(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -46,123 +55,123 @@ export default function RutinasPage() {
     });
   }, [alumnoSeleccionado]);
 
-  const borrarRutinaHistorial = async (id, e) => {
-    e.stopPropagation();
-    if (!esAdmin) return alert("Solo un administrador puede eliminar registros del historial.");
-    if (window.confirm("¿BORRAR ESTA RUTINA DEL HISTORIAL? Esta acción no se puede deshacer.")) {
-      try {
-        await deleteDoc(doc(db, "rutinas", id));
-      } catch (err) {
-        alert("Error al borrar: " + err.message);
+  // Filtros
+  const alumnosFiltrados = alumnos.filter(a => 
+    a.nombre?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
+    a.dni?.includes(busquedaAlumno)
+  );
+
+  const historialFiltrado = historialRutinas.filter(rut => 
+    rut.ejercicios?.some(ej => ej.nombre.toLowerCase().includes(busquedaHistorial.toLowerCase())) ||
+    new Date(rut.fecha).toLocaleDateString().includes(busquedaHistorial)
+  );
+
+  const ejerciciosModalFiltrados = biblioteca.filter(ej => 
+    ej.nombre?.toLowerCase().includes(busquedaModal.toLowerCase()) ||
+    ej.grupo?.toLowerCase().includes(busquedaModal.toLowerCase())
+  );
+
+  const agregarABorrador = (ej) => {
+    setEjerciciosSeleccionados([
+      ...ejerciciosSeleccionados,
+      { 
+        ...ej, 
+        s: '4', 
+        r: '12', 
+        d: '60"', 
+        p: '-', 
+        // Si el ejercicio ya tiene video u observaciones en la biblioteca, los usa. Si no, vacío.
+        observaciones: ej.observaciones || '', 
+        videoUrl: ej.videoUrl || '' 
       }
-    }
+    ]);
+    setShowModal(false);
+    setBusquedaModal('');
   };
 
   const guardarNuevaRutina = async () => {
-    if (ejerciciosSeleccionados.length === 0) return alert("Agrega al menos un ejercicio para la nueva rutina.");
-    if (!alumnoSeleccionado) return alert("Seleccioná un alumno primero.");
-    
+    if (ejerciciosSeleccionados.length === 0 || !alumnoSeleccionado) return;
     setLoading(true);
     try {
-      const dataParaGuardar = {
+      await addDoc(collection(db, "rutinas"), {
         alumnoId: alumnoSeleccionado,
         profesorId: user.uid,
         nombreProfesor: user.nombre || 'Staff',
         fecha: new Date().toISOString(),
-        ejercicios: ejerciciosSeleccionados,
+        ejercicios: ejerciciosSeleccionados, // Aquí ya viajan con URL y Obs
         createdAt: serverTimestamp()
-      };
-
-      await addDoc(collection(db, "rutinas"), dataParaGuardar);
-      
-      // IMPORTANTE: Limpiamos estados antes del alert para evitar bloqueos de UI
+      });
       setEjerciciosSeleccionados([]);
       setLoading(false);
-      
-      // Pequeño delay para que React procese el fin del loading antes del alert bloqueante
-      setTimeout(() => {
-        alert("¡RUTINA PUBLICADA EXITOSAMENTE! 🔥");
-      }, 150);
-
-    } catch (e) { 
+      setTimeout(() => alert("¡RUTINA PUBLICADA! 🔥"), 150);
+    } catch (e) {
       setLoading(false);
-      alert("Error al guardar: " + e.message); 
+      alert("Error: " + e.message);
     }
-  };
-
-  const agregarABorrador = (ej) => {
-    setEjerciciosSeleccionados([
-      ...ejerciciosSeleccionados, 
-      { ...ej, s: '4', r: '12', d: '60"', p: '-' } 
-    ]);
-    setShowModal(false);
   };
 
   return (
     <div className="animate-in fade-in duration-500 max-w-7xl mx-auto p-4">
       <header className="mb-8">
         <h1 className="text-4xl font-black italic text-white uppercase tracking-tighter">
-          PLANIFICACIÓN <span className="text-[#FF3131]">PRO</span>
+          PLANIFICACIÓN <span className="text-brandRed">PRO</span>
         </h1>
-        <p className="text-gray-500 text-[10px] font-bold uppercase tracking-[0.2em]">Gestión de entrenamientos y carga progresiva</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* COLUMNA 1: ALUMNOS (DNI) E HISTORIAL */}
         <div className="space-y-4">
-          <div className="bg-[#0a0a0a] border border-white/5 p-6 rounded-2xl">
-            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Seleccionar Alumno</label>
-            <select 
-              value={alumnoSeleccionado} 
-              onChange={(e) => setAlumnoSeleccionado(e.target.value)} 
-              className="w-full bg-black border border-white/10 rounded-xl p-3 text-white mt-2 uppercase font-bold text-xs outline-none focus:border-[#FF3131] transition-colors"
+          <GymCard>
+            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Alumno (Búsqueda por Nombre o DNI)</label>
+            <div className="relative mb-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
+              <input 
+                type="text"
+                placeholder="FILTRAR..."
+                value={busquedaAlumno}
+                onChange={(e) => setBusquedaAlumno(e.target.value)}
+                className="w-full bg-black border border-white/10 rounded-xl p-2.5 pl-9 text-white uppercase font-bold text-[10px] outline-none focus:border-brandRed"
+              />
+            </div>
+            <select
+              value={alumnoSeleccionado}
+              onChange={(e) => setAlumnoSeleccionado(e.target.value)}
+              className="w-full bg-black border border-white/10 rounded-xl p-3 text-white uppercase font-bold text-xs outline-none focus:border-brandRed"
             >
-              {alumnos.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+              {alumnosFiltrados.map(a => (
+                <option key={a.id} value={a.id}>{a.nombre} - DNI: {a.dni}</option>
+              ))}
             </select>
-          </div>
+          </GymCard>
 
-          <div className="bg-[#0a0a0a] border border-white/5 p-6 rounded-2xl">
+          <GymCard>
             <h3 className="text-white font-black text-[10px] uppercase mb-4 flex items-center gap-2">
-              <History size={14} className="text-[#FF3131]"/> Historial de Rutinas
+              <History size={14} className="text-brandRed" /> Historial de Rutinas
             </h3>
-            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-              {historialRutinas.length === 0 && <p className="text-gray-700 text-[10px] uppercase text-center py-4">Sin registros previos</p>}
-              {historialRutinas.map((rut, index) => (
-                <div key={rut.id} className={`border rounded-xl overflow-hidden transition-all ${
-                  index === 0 ? 'border-[#31FF31]/30 bg-[#31FF31]/5' : 'border-white/5 bg-white/5'
-                }`}>
-                  <div 
-                    className="w-full flex justify-between items-center p-3 hover:bg-white/5 transition-all cursor-pointer" 
-                    onClick={() => setRutinaExpandida(rutinaExpandida === rut.id ? null : rut.id)}
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-white font-black text-[10px] uppercase">
-                          {new Date(rut.fecha).toLocaleDateString()}
-                        </p>
-                        {index === 0 && (
-                          <span className="text-[8px] bg-[#31FF31] text-black px-1.5 py-0.5 rounded font-black">ACTIVA</span>
-                        )}
-                      </div>
-                      <p className="text-gray-500 text-[8px] uppercase">{rut.nombreProfesor}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {esAdmin && (
-                        <button onClick={(e) => borrarRutinaHistorial(rut.id, e)} className="p-1 hover:text-[#FF3131] text-gray-700 transition-colors">
-                          <Trash2 size={12}/>
-                        </button>
-                      )}
-                      <ChevronDown size={14} className={`text-gray-500 transition-transform ${rutinaExpandida === rut.id ? 'rotate-180' : ''}`} />
-                    </div>
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={12} />
+              <input 
+                type="text"
+                placeholder="BUSCAR EN HISTORIAL..."
+                value={busquedaHistorial}
+                onChange={(e) => setBusquedaHistorial(e.target.value)}
+                className="w-full bg-white/5 border border-white/5 rounded-lg p-2 pl-9 text-gray-400 uppercase font-bold text-[9px] outline-none focus:border-brandRed/50"
+              />
+            </div>
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              {historialFiltrado.map((rut) => (
+                <div key={rut.id} className="border border-white/5 bg-white/5 rounded-xl overflow-hidden">
+                  <div className="w-full flex justify-between items-center p-3 cursor-pointer" onClick={() => setRutinaExpandida(rutinaExpandida === rut.id ? null : rut.id)}>
+                    <p className="text-white font-black text-[10px] uppercase">{new Date(rut.fecha).toLocaleDateString()}</p>
+                    <ChevronDown size={14} className={`text-gray-500 transition-transform ${rutinaExpandida === rut.id ? 'rotate-180' : ''}`} />
                   </div>
-                  
                   {rutinaExpandida === rut.id && (
-                    <div className="p-3 bg-black/50 space-y-2 border-t border-white/5 animate-in slide-in-from-top-2 duration-300">
+                    <div className="p-3 bg-black/50 space-y-2 border-t border-white/5">
                       {rut.ejercicios.map((ej, i) => (
-                        <div key={i} className="flex justify-between text-[9px] uppercase font-bold text-gray-400">
-                          <span>{ej.nombre}</span>
-                          <span className="text-[#FF3131]">
-                            {ej.s}S x {ej.r}R | {ej.p || '-'} | {ej.d || '-'}
-                          </span>
+                        <div key={i} className="text-[9px] uppercase font-bold text-gray-400 flex justify-between">
+                          <span>• {ej.nombre}</span>
+                          {ej.videoUrl && <LinkIcon size={10} className="text-brandRed" />}
                         </div>
                       ))}
                     </div>
@@ -170,122 +179,118 @@ export default function RutinasPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </GymCard>
         </div>
 
-        <div className="lg:col-span-2 space-y-4">
-          <div className="bg-[#0a0a0a] border border-[#FF3131]/20 p-6 rounded-2xl shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-[#FF3131]/5 blur-3xl -z-10"></div>
-            
+        {/* COLUMNA 2: CONFIGURADOR */}
+        <div className="lg:col-span-2">
+          <GymCard className="border-brandRed/20 shadow-2xl relative">
             <div className="flex justify-between items-center mb-6">
-              <div>
-                <h2 className="text-white font-black uppercase text-xs italic tracking-widest">Configurar Nuevo Plan</h2>
-                <p className="text-gray-600 text-[8px] uppercase mt-1">Ajusta series, reps, descanso y carga</p>
-              </div>
-              <button 
-                onClick={() => setShowModal(true)} 
-                className="bg-white text-black px-4 py-2 rounded-lg font-black text-[10px] uppercase hover:bg-[#FF3131] hover:text-white transition-all flex items-center gap-2"
-              >
-                <Plus size={14}/> Biblioteca
-              </button>
+              <h2 className="text-white font-black uppercase text-xs italic">Armado de Rutina</h2>
+              <GymButton onClick={() => setShowModal(true)} className="py-2 px-4 text-[10px]">
+                <Plus size={14} /> BIBLIOTECA
+              </GymButton>
             </div>
 
-            <div className="space-y-3 min-h-[200px]">
-              {ejerciciosSeleccionados.length === 0 && (
-                <div className="h-40 border border-dashed border-white/5 rounded-2xl flex flex-col items-center justify-center text-gray-700">
-                  <Plus size={24} className="mb-2 opacity-20"/>
-                  <p className="text-[10px] font-black uppercase italic">No hay ejercicios cargados</p>
-                </div>
-              )}
-              
+            <div className="space-y-3 min-h-[300px]">
               {ejerciciosSeleccionados.map((ej, index) => (
-                <div key={index} className="bg-black border border-white/10 p-4 rounded-xl flex items-center justify-between gap-4 animate-in zoom-in-95 duration-200">
-                  <div className="flex-1">
-                    <h4 className="text-white font-black uppercase text-sm italic">{ej.nombre}</h4>
-                    <p className="text-[8px] text-[#FF3131] font-bold uppercase">{ej.grupo}</p>
+                <div key={index} className="bg-white/5 border border-white/10 p-5 rounded-[30px] space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="text-white font-black uppercase text-sm italic">{ej.nombre}</h4>
+                      <p className="text-[8px] text-brandRed font-bold uppercase">{ej.grupo}</p>
+                    </div>
+                    <button onClick={() => setEjerciciosSeleccionados(ejerciciosSeleccionados.filter((_, i) => i !== index))} className="text-gray-700 hover:text-brandRed"><Trash2 size={16} /></button>
                   </div>
                   
-                  <div className="flex gap-2 items-end">
-                    {[
-                      { key: 's', label: 'SER', ph: '4' },
-                      { key: 'r', label: 'REP', ph: '12' },
-                      { key: 'd', label: 'DES', ph: '60"' },
-                      { key: 'p', label: 'PES', ph: 'KG' }
-                    ].map(campo => (
-                      <div key={campo.key} className="flex flex-col items-center">
-                        <span className="text-[7px] text-gray-600 uppercase font-black mb-1">{campo.label}</span>
-                        <input 
-                          type="text" 
-                          placeholder={campo.ph}
-                          value={ej[campo.key]} 
-                          onChange={(e) => { 
-                            const n = [...ejerciciosSeleccionados]; 
-                            n[index][campo.key] = e.target.value; 
-                            setEjerciciosSeleccionados(n); 
-                          }} 
-                          className="w-11 bg-white/5 border border-white/10 text-white text-[11px] text-center rounded-lg p-1.5 focus:border-[#FF3131] outline-none transition-colors" 
-                        />
-                      </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {['s', 'r', 'd', 'p'].map(campo => (
+                      <input key={campo} type="text" value={ej[campo]} onChange={(e) => {
+                        const n = [...ejerciciosSeleccionados]; n[index][campo] = e.target.value; setEjerciciosSeleccionados(n);
+                      }} className="w-full bg-black border border-white/10 text-white text-[10px] text-center rounded-xl p-2 focus:border-brandRed outline-none" />
                     ))}
-                    <button 
-                      onClick={() => setEjerciciosSeleccionados(ejerciciosSeleccionados.filter((_, i) => i !== index))} 
-                      className="text-gray-700 hover:text-red-500 p-1.5 mb-0.5"
-                    >
-                      <Trash2 size={16}/>
-                    </button>
+                  </div>
+
+                  {/* Editores de URL y Obs (Vienen precargados pero podés cambiarlos solo para esta rutina) */}
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={12} />
+                      <input 
+                        type="text" 
+                        placeholder="URL Video..." 
+                        value={ej.videoUrl || ''} 
+                        onChange={(e) => {
+                          const n = [...ejerciciosSeleccionados]; n[index].videoUrl = e.target.value; setEjerciciosSeleccionados(n);
+                        }}
+                        className="w-full bg-black/40 border border-white/5 rounded-lg p-2 pl-9 text-[9px] text-gray-400 outline-none focus:border-brandRed/30"
+                      />
+                    </div>
+                    <div className="relative">
+                      <Info className="absolute left-3 top-3 text-gray-600" size={12} />
+                      <textarea 
+                        placeholder="Observaciones para el alumno..." 
+                        value={ej.observaciones || ''} 
+                        onChange={(e) => {
+                          const n = [...ejerciciosSeleccionados]; n[index].observaciones = e.target.value; setEjerciciosSeleccionados(n);
+                        }}
+                        className="w-full bg-black/40 border border-white/5 rounded-lg p-2 pl-9 text-[9px] text-gray-400 outline-none focus:border-brandRed/30 min-h-[40px]"
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
 
-            <button 
-              onClick={guardarNuevaRutina} 
-              disabled={loading || ejerciciosSeleccionados.length === 0} 
-              className="w-full mt-8 bg-[#FF3131] text-white font-black py-4 rounded-xl uppercase italic text-xs shadow-[0_0_30px_rgba(255,49,49,0.2)] disabled:opacity-50 disabled:shadow-none transition-all active:scale-[0.98] flex items-center justify-center gap-3"
-            >
-              {loading ? (
-                <><Loader2 size={16} className="animate-spin"/> PUBLICANDO...</>
-              ) : (
-                <><CheckCircle2 size={16}/> GUARDAR Y PUBLICAR RUTINA</>
-              )}
-            </button>
-          </div>
+            <div className="mt-8">
+              <GymButton onClick={guardarNuevaRutina} disabled={loading || ejerciciosSeleccionados.length === 0} className="w-full bg-[#FF3131] text-white font-black italic shadow-lg shadow-brandRed/20">
+                {loading ? <Loader2 className="animate-spin" size={20} /> : "PUBLICAR RUTINA 🔥"}
+              </GymButton>
+            </div>
+          </GymCard>
         </div>
       </div>
 
+      {/* MODAL BIBLIOTECA */}
       {showModal && (
         <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-3xl p-6 shadow-2xl">
-             <div className="flex justify-between items-center mb-6">
-                <h3 className="text-white font-black uppercase tracking-tighter flex items-center gap-2">
-                  <Plus size={18} className="text-[#FF3131]"/> Biblioteca
-                </h3>
-                <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-white transition-colors">
-                  <X size={20} />
-                </button>
-             </div>
-             <div className="space-y-2 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
-                {biblioteca.map(ej => (
-                  <button 
-                    key={ej.id} 
-                    onClick={() => agregarABorrador(ej)} 
-                    className="w-full group text-left p-4 rounded-2xl border border-white/5 text-white font-bold text-xs hover:bg-[#FF3131] hover:border-[#FF3131] uppercase transition-all flex justify-between items-center"
-                  >
-                    <div>
-                      <p className="group-hover:text-white transition-colors">{ej.nombre}</p>
-                      <p className="text-[8px] text-gray-500 group-hover:text-white/70 uppercase">{ej.grupo}</p>
+          <GymCard className="w-full max-w-md border border-white/10">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-white font-black uppercase italic text-sm">Biblioteca</h3>
+              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-white"><X size={20} /></button>
+            </div>
+            
+            <div className="relative mb-6">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-brandRed" size={16} />
+              <input 
+                type="text"
+                autoFocus
+                placeholder="BUSCAR EJERCICIO..."
+                value={busquedaModal}
+                onChange={(e) => setBusquedaModal(e.target.value)}
+                className="w-full bg-black border-2 border-brandRed/20 rounded-2xl p-4 pl-12 text-white uppercase font-black text-xs outline-none focus:border-brandRed"
+              />
+            </div>
+
+            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+              {ejerciciosModalFiltrados.map(ej => (
+                <button key={ej.id} onClick={() => agregarABorrador(ej)} className="w-full text-left p-4 rounded-2xl border border-white/5 text-white font-bold text-[10px] hover:bg-brandRed transition-all flex justify-between uppercase items-center">
+                  <div>
+                    <p>{ej.nombre}</p>
+                    <div className="flex gap-2 mt-1">
+                      {ej.videoUrl && <span className="text-[7px] bg-white/10 px-1 rounded text-green-400">VIDEO</span>}
+                      {ej.observaciones && <span className="text-[7px] bg-white/10 px-1 rounded text-blue-400">TIPS</span>}
                     </div>
-                    <Plus size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
-                ))}
-             </div>
-          </div>
+                  </div>
+                  <Plus size={14} />
+                </button>
+              ))}
+            </div>
+          </GymCard>
         </div>
       )}
 
       <style jsx>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #FF3131; }
       `}</style>
