@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
-import { User, Mail, Lock, Key, RefreshCcw, CreditCard, Search, ShieldAlert, Trash2 } from 'lucide-react'; 
+import { User, Mail, Lock, Key, RefreshCcw, CreditCard, Search, ShieldAlert, Trash2, Calendar } from 'lucide-react'; 
 import { db, auth } from '../lib/firebase'; 
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, getAuth } from 'firebase/auth';
-import { doc, setDoc, collection, getDocs, query, orderBy, where, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, getDocs, query, orderBy, where, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { initializeApp, getApps } from 'firebase/app';
 
-// EXTRAEMOS LA CONFIGURACIÓN DEL AUTH YA INICIALIZADO
+// Configuración de Auth secundaria para no cerrar la sesión del Admin actual
 const firebaseConfig = auth.app.options;
-
-// Inicializamos la app secundaria (esto evita que se te cierre la sesión de admin)
 const secondaryApp = getApps().find(app => app.name === "Secondary") 
                      || initializeApp(firebaseConfig, "Secondary");
 const secondaryAuth = getAuth(secondaryApp);
@@ -22,7 +20,9 @@ export default function UsuariosPage() {
     dni: '',
     email: '',
     password: '',
-    role: 'alumno'
+    role: 'alumno',
+    fecha_pago: new Date().toISOString().split('T')[0],
+    fecha_vencimiento: ''
   });
 
   const fetchUsuarios = async () => {
@@ -45,27 +45,43 @@ export default function UsuariosPage() {
     setLoading(true);
 
     try {
+      // 1. Verificación de DNI duplicado
       const qDni = query(collection(db, "users"), where("dni", "==", formData.dni));
       const dniCheck = await getDocs(qDni);
-      if (!dniCheck.empty) {
-        throw new Error("Este DNI ya está registrado.");
-      }
+      if (!dniCheck.empty) throw new Error("Este DNI ya está registrado.");
 
+      // 2. Crear usuario en Auth (App secundaria)
       const userCredential = await createUserWithEmailAndPassword(secondaryAuth, formData.email, formData.password);
       const newUser = userCredential.user;
 
-      await setDoc(doc(db, "users", newUser.uid), {
-        nombre: formData.nombre.toUpperCase(),
-        dni: formData.dni,
-        email: formData.email,
+      // 3. Preparar data para Firestore
+      const userData = {
+        nombre: formData.nombre.toUpperCase().trim(),
+        dni: formData.dni.trim(),
+        email: formData.email.toLowerCase().trim(),
         role: formData.role,
-        createdAt: new Date()
-      });
+        createdAt: serverTimestamp(),
+        // Agregamos un campo de búsqueda normalizado por si acaso
+        searchName: formData.nombre.toLowerCase()
+      };
 
+      if (formData.role === 'alumno') {
+        userData.fecha_pago = formData.fecha_pago;
+        userData.fecha_vencimiento = formData.fecha_vencimiento;
+      }
+
+      // 4. Guardar en Firestore y desloguear la app secundaria
+      await setDoc(doc(db, "users", newUser.uid), userData);
       await signOut(secondaryAuth);
 
       alert(`¡ÉXITO! ${formData.nombre} registrado.`);
-      setFormData({ nombre: '', dni: '', email: '', password: '', role: 'alumno' });
+      
+      // Reset Form
+      setFormData({ 
+        nombre: '', dni: '', email: '', password: '', role: 'alumno', 
+        fecha_pago: new Date().toISOString().split('T')[0], fecha_vencimiento: '' 
+      });
+      
       fetchUsuarios(); 
     } catch (err) {
       alert("Error: " + err.message);
@@ -78,19 +94,16 @@ export default function UsuariosPage() {
     if (!window.confirm(`¿Enviar correo de recuperación a ${email}?`)) return;
     try {
       await sendPasswordResetEmail(auth, email);
-      alert("Email enviado.");
+      alert("Email de recuperación enviado correctamente.");
     } catch (err) {
       alert("Error: " + err.message);
     }
   };
 
-  // NUEVA FUNCIÓN PARA ELIMINAR DE FIRESTORE
   const handleDelete = async (id, nombre) => {
-    if (!window.confirm(`¿ESTÁS SEGURO? Vas a eliminar a ${nombre} de la base de datos. Esta acción no se puede deshacer.`)) return;
-    
+    if (!window.confirm(`¿ESTÁS SEGURO? Se eliminará a ${nombre}. Esta acción no borra las credenciales de Auth, solo el perfil de Firestore.`)) return;
     try {
       await deleteDoc(doc(db, "users", id));
-      alert("Usuario eliminado de la base de datos.");
       fetchUsuarios();
     } catch (err) {
       alert("Error al eliminar: " + err.message);
@@ -105,6 +118,7 @@ export default function UsuariosPage() {
 
   return (
     <div className="max-w-6xl animate-in fade-in duration-500 mx-auto p-4">
+      {/* HEADER */}
       <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
           <h1 className="text-4xl font-black italic text-white uppercase tracking-tighter">
@@ -119,8 +133,7 @@ export default function UsuariosPage() {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* FORMULARIO */}
+        {/* FORMULARIO DE ALTA */}
         <form onSubmit={handleSubmit} className="bg-[#0a0a0a] border border-white/5 p-8 rounded-3xl space-y-6 h-fit shadow-2xl">
           <h2 className="text-white font-black uppercase text-sm italic border-l-4 border-[#FF3131] pl-3">Alta de Usuario</h2>
           
@@ -170,12 +183,25 @@ export default function UsuariosPage() {
             </div>
           </div>
 
-          <button type="submit" disabled={loading} className="w-full bg-white text-black font-black py-5 rounded-2xl uppercase italic hover:bg-[#FF3131] hover:text-white transition-all transform active:scale-95 shadow-xl shadow-white/5">
+          {formData.role === 'alumno' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-white/5 animate-in slide-in-from-top-2">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-[#FF3131] flex items-center gap-1 tracking-widest"><Calendar size={10}/> Fecha de Pago</label>
+                <input type="date" className="w-full bg-black border border-white/10 rounded-xl p-3 text-white text-xs font-bold outline-none focus:border-[#FF3131]" value={formData.fecha_pago} onChange={e => setFormData({...formData, fecha_pago: e.target.value})} required />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-[#FF3131] flex items-center gap-1 tracking-widest"><Calendar size={10}/> Vencimiento</label>
+                <input type="date" className="w-full bg-black border border-white/10 rounded-xl p-3 text-white text-xs font-bold outline-none focus:border-[#FF3131]" value={formData.fecha_vencimiento} onChange={e => setFormData({...formData, fecha_vencimiento: e.target.value})} required />
+              </div>
+            </div>
+          )}
+
+          <button type="submit" disabled={loading} className="w-full bg-white text-black font-black py-5 rounded-2xl uppercase italic hover:bg-[#FF3131] hover:text-white transition-all transform active:scale-95 shadow-xl shadow-white/5 disabled:opacity-50">
             {loading ? 'REGISTRANDO...' : 'CREAR USUARIO 🔥'}
           </button>
         </form>
 
-        {/* LISTADO CON BUSCADOR */}
+        {/* LISTA DE USUARIOS */}
         <div className="bg-[#0a0a0a] border border-white/5 rounded-3xl flex flex-col overflow-hidden h-[700px] shadow-2xl">
           <div className="p-6 border-b border-white/5 bg-white/5 space-y-4">
             <div className="flex justify-between items-center px-1">
@@ -185,13 +211,7 @@ export default function UsuariosPage() {
             
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#FF3131]" size={18} />
-              <input 
-                type="text" 
-                placeholder="BUSCAR NOMBRE, DNI O EMAIL..." 
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white text-[10px] font-black uppercase outline-none focus:border-[#FF3131]"
-              />
+              <input type="text" placeholder="BUSCAR NOMBRE, DNI O EMAIL..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white text-[10px] font-black uppercase outline-none focus:border-[#FF3131]" />
             </div>
           </div>
           
@@ -205,29 +225,18 @@ export default function UsuariosPage() {
                       <span className="text-gray-600 text-[10px] font-medium">{u.email}</span>
                       <span className="text-gray-400 text-[9px] font-black uppercase italic bg-white/5 px-2 py-0.5 rounded">DNI: {u.dni || 'S/D'}</span>
                     </div>
-                    <div className="mt-2 flex items-center gap-2">
+                    {u.role === 'alumno' && u.fecha_vencimiento && (
+                      <span className="text-[8px] font-black text-[#FF3131] uppercase">Vence: {u.fecha_vencimiento}</span>
+                    )}
+                    <div className="mt-2">
                       <span className="px-2 py-0.5 rounded-lg bg-[#FF3131]/10 text-[#FF3131] text-[8px] font-black uppercase border border-[#FF3131]/20">
                         {u.role}
                       </span>
                     </div>
                   </div>
-                  
                   <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleResetPassword(u.email)} 
-                      className="p-3 bg-orange-500/10 text-orange-500 rounded-xl hover:bg-orange-500 hover:text-white transition-all transform hover:rotate-6"
-                      title="Reset Password"
-                    >
-                      <Key size={18} />
-                    </button>
-                    
-                    <button 
-                      onClick={() => handleDelete(u.id, u.nombre)} 
-                      className="p-3 bg-[#FF3131]/10 text-[#FF3131] rounded-xl hover:bg-[#FF3131] hover:text-white transition-all transform hover:-rotate-6"
-                      title="Eliminar Usuario"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    <button onClick={() => handleResetPassword(u.email)} title="Reset Password" className="p-3 bg-orange-500/10 text-orange-500 rounded-xl hover:bg-orange-500 hover:text-white transition-all transform hover:rotate-6"><Key size={18} /></button>
+                    <button onClick={() => handleDelete(u.id, u.nombre)} title="Eliminar" className="p-3 bg-[#FF3131]/10 text-[#FF3131] rounded-xl hover:bg-[#FF3131] hover:text-white transition-all transform hover:-rotate-6"><Trash2 size={18} /></button>
                   </div>
                 </div>
               ))
@@ -237,6 +246,12 @@ export default function UsuariosPage() {
           </div>
         </div>
       </div>
+      
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #FF3131; }
+      `}</style>
     </div>
   );
 }

@@ -4,6 +4,8 @@ import {
   signIn as authSignIn,
   signOut as authSignOut,
 } from '../lib/authService.js';
+import { doc, onSnapshot } from 'firebase/firestore'; 
+import { db } from '../lib/firebase';
 
 const AuthContext = createContext(null);
 
@@ -18,17 +20,55 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Settings de diseño/colores (tu lógica anterior)
+  const [appSettings, setAppSettings] = useState({ notificationsEnabled: true, timerEnabled: true });
+  
+  // NUEVO: Estado global de Features (los interruptores maestros)
+  const [features, setFeatures] = useState({
+    analyticsEnabled: false,
+    timerEnabled: false,
+    temporizadorEnabled: false,
+    notificacionesCuotaEnabled: false
+  });
 
+  // 1. Escuchar configuraciones globales (global y features)
   useEffect(() => {
-    // Escuchamos cambios en la autenticación
+    // Escucha configuraciones de diseño
+    const unsubSettings = onSnapshot(doc(db, "configuracion", "global"), (doc) => {
+      if (doc.exists()) setAppSettings(doc.data());
+    });
+
+    // ESCUCHA DE FEATURES (INTERRUPTORES)
+    const unsubFeatures = onSnapshot(doc(db, "configuracion", "features"), (doc) => {
+      if (doc.exists()) {
+        setFeatures(doc.data());
+      }
+    });
+
+    return () => {
+      unsubSettings();
+      unsubFeatures();
+    };
+  }, []);
+
+  // 2. Lógica de Autenticación
+  useEffect(() => {
     const unsubscribe = subscribeToAuthChanges((firebaseUser, userRole, data) => {
       if (firebaseUser) {
-        // Si hay usuario, combinamos todo en un solo objeto 'user'
-        // Esto arregla que el Sidebar y Dashboard lean bien el rol
+        let diasParaVencer = null;
+        if (data?.fecha_vencimiento) {
+          const hoy = new Date();
+          const vto = new Date(data.fecha_vencimiento);
+          const diffTime = vto - hoy;
+          diasParaVencer = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+
         setUser({
           ...firebaseUser,
-          role: userRole || 'alumno', // Por defecto alumno si no hay rol
-          ...data
+          role: userRole || 'alumno',
+          ...data,
+          diasParaVencer 
         });
       } else {
         setUser(null);
@@ -45,7 +85,6 @@ export function AuthProvider({ children }) {
     setLoading(true);
     try {
       const result = await authSignIn(email, password);
-      // Al loguear, también unificamos el objeto
       setUser({
         ...result.user,
         role: result.role,
@@ -74,18 +113,21 @@ export function AuthProvider({ children }) {
 
   const hasRole = (...allowedRoles) => {
     if (!user?.role) return false;
-    return allowedRoles.includes(user.role.toLowerCase());
+    const normalizedRole = user.role.toLowerCase().trim();
+    return allowedRoles.some(r => r.toLowerCase() === normalizedRole || (r === 'admin' && normalizedRole === 'administrador'));
   };
 
   const value = {
     user,
-    role: user?.role, // Mantenemos compatibilidad
+    role: user?.role,
     loading,
     error,
     signIn,
-    logout: signOut, // Renombramos a logout para que coincida con tu Sidebar
+    logout: signOut,
     hasRole,
     isAuthenticated: !!user,
+    settings: appSettings,
+    features, // EXPORTAMOS LAS FEATURES AQUÍ
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

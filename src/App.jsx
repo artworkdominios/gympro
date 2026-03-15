@@ -10,6 +10,7 @@ import RutinasPage from './pages/RutinasPage.jsx';
 import MiRutinaPage from './pages/MiRutinaPage.jsx'; 
 import PerfilPage from './pages/PerfilPage';
 import LogActividadPage from './pages/LogActividadPage';
+import SuperAdminPage from './pages/SuperAdminPage'; // Asegurate de crear este archivo
 
 // --- CAMBIO AQUÍ: Agregamos flex-col para móvil y md:flex-row para PC ---
 function AppLayout({ children }) {
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="/mi-rutina" element={<ProtectedRoute><MiRutinaPage /></ProtectedRoute>} />
           <Route path="/perfil" element={<ProtectedRoute><PerfilPage /></ProtectedRoute>} />
           <Route path="/log-actividad" element={<ProtectedRoute><LogActividadPage /></ProtectedRoute>} />
+          <Route path="/super-admin" element={<ProtectedRoute><SuperAdminPage /></ProtectedRoute>} />
           <Route path="/config" element={<ProtectedRoute><PlaceholderPage title="Configuración" /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -1,118 +1,251 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { useAuth } from '../context/AuthContext';
-import { collection, query, where, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
-import { Search, Trash2, UserCircle, Edit3, X, Save, Shield } from 'lucide-react';
+import { collection, onSnapshot, query, where, doc, updateDoc } from 'firebase/firestore';
+import { Search, UserPlus, MoreVertical, Calendar, CreditCard, CheckCircle2, AlertCircle, Save, X, HeartPulse } from 'lucide-react';
 
 export default function AlumnosPage() {
-  const { user } = useAuth();
-  const role = user?.role?.toLowerCase().trim();
-  
-  // Permisos: Solo Admin y Manager gestionan
-  const esGestion = role === 'administrador' || role === 'admin' || role === 'manager';
-
   const [alumnos, setAlumnos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [busqueda, setBusqueda] = useState('');
-  const [editando, setEditando] = useState(null);
-  const [nuevoNombre, setNuevoNombre] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedAlumno, setSelectedAlumno] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [features, setFeatures] = useState({ aptoMedicoEnabled: false }); // Estado para el Control Maestro
+  
+  const [editNombre, setEditNombre] = useState('');
+  const [editFecha, setEditFecha] = useState('');
+  const [editApto, setEditApto] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const q = query(collection(db, "users"), where("role", "==", "alumno"));
-    return onSnapshot(q, (snapshot) => {
-      setAlumnos(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
+    // 1. Escuchar Configuración del Control Maestro
+    const unsubConfig = onSnapshot(doc(db, "configuracion", "features"), (snap) => {
+      if (snap.exists()) setFeatures(snap.data());
     });
+
+    // 2. Escuchar Lista de Alumnos
+    const q = query(collection(db, "users"), where("role", "==", "alumno"));
+    const unsubAlumnos = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data() 
+      }));
+      setAlumnos(docs);
+    });
+
+    return () => {
+      unsubConfig();
+      unsubAlumnos();
+    };
   }, []);
 
-  const handleUpdate = async (id) => {
-    if (!nuevoNombre.trim()) return;
-    await updateDoc(doc(db, "users", id), { nombre: nuevoNombre.toUpperCase() });
-    setEditando(null);
+  // Lógica combinada de estados (Cuota y Apto Médico)
+  const getEstadoData = (fechaVencimiento, fechaApto) => {
+    const hoy = new Date();
+    
+    // Estado de Cuota
+    let cuota = { label: 'VIGENTE', color: 'text-green-500', bg: 'bg-green-500/10', icon: <CheckCircle2 size={12}/> };
+    if (!fechaVencimiento) {
+      cuota = { label: 'SIN FECHA', color: 'text-gray-500', bg: 'bg-gray-500/10', icon: null };
+    } else if (new Date(fechaVencimiento) < hoy) {
+      cuota = { label: 'VENCIDO', color: 'text-[#FF3131]', bg: 'bg-red-500/10', icon: <AlertCircle size={12}/> };
+    }
+
+    // Estado de Apto Médico (solo si está habilitado en Control Maestro)
+    let apto = { label: 'OK', color: 'text-gray-500', alerta: false };
+    if (features.aptoMedicoEnabled && fechaApto) {
+      const vencApto = new Date(fechaApto);
+      const diffTime = vencApto - hoy;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays <= 0) {
+        apto = { label: 'APTO VENCIDO', color: 'text-[#FF3131]', alerta: true };
+      } else if (diffDays <= 30) {
+        apto = { label: `VENCE EN ${diffDays} DÍAS`, color: 'text-yellow-500', alerta: true };
+      }
+    } else if (features.aptoMedicoEnabled && !fechaApto) {
+      apto = { label: 'PENDIENTE', color: 'text-gray-600', alerta: true };
+    }
+
+    return { cuota, apto };
   };
 
-  const handleDelete = async (id, nombre) => {
-    if (!esGestion) return;
-    if (window.confirm(`¿BORRAR DEFINITIVAMENTE A ${nombre}?`)) {
-      await deleteDoc(doc(db, "users", id));
+  const openModal = (alumno) => {
+    setSelectedAlumno(alumno);
+    setEditNombre(alumno.nombre || '');
+    setEditFecha(alumno.fecha_vencimiento || '');
+    setEditApto(alumno.fecha_apto || ''); // Cargamos fecha de apto
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedAlumno?.id) return;
+    setLoading(true);
+    try {
+      const userRef = doc(db, "users", selectedAlumno.id);
+      await updateDoc(userRef, {
+        nombre: editNombre,
+        fecha_vencimiento: editFecha,
+        fecha_apto: editApto // Guardamos fecha de apto
+      });
+      setIsModalOpen(false);
+      setSelectedAlumno(null);
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Error al guardar");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const filtrados = alumnos.filter(a => a.nombre?.toLowerCase().includes(busqueda.toLowerCase()));
+  const filteredAlumnos = alumnos.filter(alumno => {
+    const term = searchTerm.toLowerCase();
+    const { cuota, apto } = getEstadoData(alumno.fecha_vencimiento, alumno.fecha_apto);
+    
+    return (
+      alumno.nombre?.toLowerCase().includes(term) ||
+      alumno.username?.toLowerCase().includes(term) ||
+      cuota.label.toLowerCase().includes(term) ||
+      (features.aptoMedicoEnabled && apto.label.toLowerCase().includes(term))
+    );
+  });
 
   return (
-    <div className="animate-in fade-in duration-500">
-      <header className="mb-8">
-        <h1 className="text-4xl font-black italic text-white uppercase tracking-tighter">
-          {esGestion ? 'Gestión' : 'Lista'} <span className="text-[#FF3131]">Alumnos</span>
-        </h1>
-      </header>
+    <div className="animate-in fade-in duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
+        <div>
+          <h1 className="text-4xl font-black text-white italic tracking-tighter uppercase">
+            Gestión de <span className="text-[#FF3131]">Alumnos</span>
+          </h1>
+          <p className="text-gray-500 text-[10px] font-bold uppercase tracking-[3px]">Panel Administrativo</p>
+        </div>
+        <button className="bg-white text-black font-black px-6 py-3 rounded-2xl flex items-center gap-2 uppercase text-[10px] hover:bg-[#FF3131] hover:text-white transition-all">
+          <UserPlus size={16} /> Nuevo Alumno
+        </button>
+      </div>
 
       <div className="relative mb-6">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
         <input 
-          type="text" 
-          placeholder="BUSCAR ALUMNO POR NOMBRE..." 
-          className="w-full bg-[#0a0a0a] border border-white/5 rounded-xl py-4 pl-12 text-white text-[10px] font-black uppercase outline-none focus:border-[#FF3131]/50"
-          onChange={(e) => setBusqueda(e.target.value)}
+          type="text"
+          placeholder="BUSCAR POR NOMBRE, ESTADO O APTO..."
+          className="w-full bg-[#0a0a0a] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-white text-[10px] font-bold tracking-widest focus:border-[#FF3131] outline-none transition-all"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
         />
       </div>
 
-      <div className="bg-[#0a0a0a] border border-white/5 rounded-2xl overflow-hidden shadow-2xl">
-        <table className="w-full text-left">
-          <thead className="bg-white/5 text-[#FF3131] text-[10px] font-black uppercase tracking-widest">
-            <tr>
-              <th className="p-5">Alumno</th>
-              <th className="p-5">Email</th>
-              {esGestion && <th className="p-5 text-right">Acciones</th>}
+      <div className="bg-[#0a0a0a] border border-white/5 rounded-[32px] overflow-hidden shadow-2xl">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b border-white/5 bg-white/5">
+              <th className="p-6 text-[9px] font-black text-gray-400 uppercase tracking-widest">Alumno</th>
+              <th className="p-6 text-[9px] font-black text-gray-400 uppercase tracking-widest">Estado Cuota</th>
+              {features.aptoMedicoEnabled && (
+                <th className="p-6 text-[9px] font-black text-gray-400 uppercase tracking-widest">Apto Médico</th>
+              )}
+              <th className="p-6 text-[9px] font-black text-gray-400 uppercase tracking-widest text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody>
-            {alumnos.length === 0 ? (
-              <tr><td colSpan="3" className="p-10 text-center text-gray-500 text-[10px] font-black uppercase">No hay alumnos registrados</td></tr>
-            ) : filtrados.map((a) => (
-              <tr key={a.id} className="border-b border-white/5 hover:bg-white/[0.01]">
-                <td className="p-5">
-                  {editando === a.id ? (
-                    <div className="flex gap-2">
-                      <input 
-                        className="bg-black border border-[#FF3131] rounded px-2 py-1 text-white text-xs uppercase"
-                        value={nuevoNombre}
-                        onChange={(e) => setNuevoNombre(e.target.value)}
-                        autoFocus
-                      />
-                      <button onClick={() => handleUpdate(a.id)} className="text-green-500"><Save size={16}/></button>
-                      <button onClick={() => setEditando(null)} className="text-gray-500"><X size={16}/></button>
-                    </div>
-                  ) : (
+          <tbody className="divide-y divide-white/5">
+            {filteredAlumnos.map((alumno) => {
+              const { cuota, apto } = getEstadoData(alumno.fecha_vencimiento, alumno.fecha_apto);
+              return (
+                <tr key={alumno.id} className="hover:bg-white/[0.02] transition-colors group">
+                  <td className="p-6">
                     <div className="flex items-center gap-3">
-                      <UserCircle className={esGestion ? "text-[#FF3131]" : "text-gray-600"} size={20} />
-                      <span className="text-white font-bold uppercase text-xs italic tracking-tight">{a.nombre}</span>
+                      <div className="h-10 w-10 bg-gradient-to-br from-[#FF3131] to-[#b31d1d] rounded-xl flex items-center justify-center text-white font-black italic">
+                        {alumno.nombre?.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-sm uppercase italic">{alumno.nombre}</p>
+                        <p className="text-gray-500 text-[9px] font-bold italic">@{alumno.username}</p>
+                      </div>
                     </div>
+                  </td>
+                  <td className="p-6">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-black tracking-tighter ${cuota.bg} ${cuota.color}`}>
+                      {cuota.icon} {cuota.label}
+                    </span>
+                  </td>
+                  {features.aptoMedicoEnabled && (
+                    <td className="p-6">
+                      <div className={`flex items-center gap-2 text-[10px] font-bold ${apto.color}`}>
+                        <HeartPulse size={14} className={apto.alerta ? "animate-pulse" : ""} />
+                        {apto.label}
+                      </div>
+                    </td>
                   )}
-                </td>
-                <td className="p-5 text-gray-500 text-xs">{a.email}</td>
-                {esGestion && (
-                  <td className="p-5 text-right space-x-4">
-                    <button 
-                      onClick={() => { setEditando(a.id); setNuevoNombre(a.nombre); }} 
-                      className="text-gray-500 hover:text-white transition-colors"
-                    >
-                      <Edit3 size={16} />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(a.id, a.nombre)} 
-                      className="text-gray-700 hover:text-[#FF3131] transition-colors"
-                    >
-                      <Trash2 size={16} />
+                  <td className="p-6 text-right">
+                    <button onClick={() => openModal(alumno)} className="text-gray-500 hover:text-white p-2">
+                      <MoreVertical size={20} />
                     </button>
                   </td>
-                )}
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
+          <div className="bg-[#111] border border-white/10 w-full max-w-lg rounded-[40px] overflow-hidden shadow-2xl animate-in zoom-in-95">
+            <div className="p-8 bg-gradient-to-r from-[#FF3131]/10 to-transparent border-b border-white/5 flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter">Perfil Alumno</h2>
+                <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest">Edición de datos y fechas</p>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-500 hover:text-white">
+                <X size={24} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSave} className="p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-[#FF3131] uppercase tracking-[2px]">Nombre</label>
+                <input 
+                  type="text" value={editNombre}
+                  onChange={(e) => setEditNombre(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-xs font-bold outline-none focus:border-[#FF3131]"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-[#FF3131] uppercase tracking-[2px]">Venc. Cuota</label>
+                  <input 
+                    type="date" value={editFecha}
+                    onChange={(e) => setEditFecha(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-xs font-bold outline-none"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-[#FF3131] uppercase tracking-[2px]">Venc. Apto</label>
+                  <input 
+                    type="date" value={editApto}
+                    onChange={(e) => setEditApto(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-xs font-bold outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="p-8 bg-white/[0.02] border-t border-white/5 flex gap-3 -mx-8 -mb-8 mt-6">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-white/5 text-white font-black py-4 rounded-2xl uppercase text-[10px]">
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" disabled={loading}
+                  className="flex-1 bg-[#FF3131] text-white font-black py-4 rounded-2xl uppercase text-[10px] shadow-[0_0_20px_rgba(255,49,49,0.3)] disabled:opacity-50"
+                >
+                  {loading ? 'GUARDANDO...' : 'GUARDAR CAMBIOS'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

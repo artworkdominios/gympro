@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle2, Circle, Timer, Weight, ChevronDown, Lightbulb } from 'lucide-react';
+import { CheckCircle2, Circle, ChevronDown, Lightbulb, RotateCcw } from 'lucide-react';
 import GymCard from './GymCard.jsx';
 
-export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onExpand }) {
+export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onExpand, showRestTimer }) {
   const { nombre, grupo, s, r, d, p, videoUrl, observaciones } = ejercicio;
 
-  const [timeLeft, setTimeLeft] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(parseInt(d) || 60);
   const [isRunning, setIsRunning] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
 
-  // Detección y formateo de URL para YouTube
   const isYoutube = videoUrl?.includes('youtube.com') || videoUrl?.includes('youtu.be');
 
   const getEmbedUrl = (url) => {
@@ -16,28 +16,50 @@ export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onEx
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     return (match && match[2].length === 11) 
-      ? `https://www.youtube.com/embed/${match[2]}?modestbranding=1&rel=0&iv_load_policy=3` 
+      ? `https://www.youtube.com/embed/${match[2]}?autoplay=1&mute=1&modestbranding=1&rel=0&iv_load_policy=3` 
       : url;
   };
 
   const embedUrl = getEmbedUrl(videoUrl);
 
+  // Lógica del Temporizador
   useEffect(() => {
     let interval;
     if (isRunning && timeLeft > 0) {
+      setIsFinished(false); 
       interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-    } else if (timeLeft === 0) {
+    } else if (timeLeft === 0 && isRunning) {
       setIsRunning(false);
+      setIsFinished(true);
       clearInterval(interval);
+      if (window.navigator.vibrate) window.navigator.vibrate(200);
     }
     return () => clearInterval(interval);
   }, [isRunning, timeLeft]);
 
-  const startTimer = (e) => {
+  // Resetear al cerrar/abrir o cambiar descanso
+  useEffect(() => {
+    if (!isRunning) {
+      setTimeLeft(parseInt(d) || 60);
+      setIsFinished(false);
+    }
+  }, [d, isOpen]);
+
+  const handleTimerClick = (e) => {
     e.stopPropagation();
-    const segundos = parseInt(d) || 60;
-    setTimeLeft(segundos);
-    setIsRunning(true);
+    if (!showRestTimer) return; // Seguridad extra
+    if (isFinished || timeLeft === 0) {
+      setIsFinished(false);
+      setTimeLeft(parseInt(d) || 60);
+    }
+    setIsRunning(!isRunning);
+  };
+
+  const handleReset = (e) => {
+    e.stopPropagation();
+    setIsRunning(false);
+    setIsFinished(false);
+    setTimeLeft(parseInt(d) || 60);
   };
 
   return (
@@ -56,78 +78,82 @@ export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onEx
           </button>
 
           <div>
-            <h3 className={`text-lg font-black italic uppercase ${isDone ? 'text-gray-600 line-through' : 'text-white'}`}>
+            <h3 className={`text-lg font-black italic uppercase leading-tight ${isDone ? 'text-gray-600 line-through' : 'text-white'}`}>
               {nombre}
             </h3>
-            <p className="text-brandRed text-[8px] font-black uppercase tracking-widest">{grupo}</p>
+            <p className="text-[#FF3131] text-[8px] font-black uppercase tracking-widest mt-1">{grupo}</p>
           </div>
         </div>
-        <ChevronDown size={18} className={`text-gray-600 transition-transform ${isOpen ? 'rotate-180 text-brandRed' : ''}`} />
+        <ChevronDown size={18} className={`text-gray-600 transition-transform ${isOpen ? 'rotate-180 text-[#FF3131]' : ''}`} />
       </div>
 
       {isOpen && (
         <div className="mt-5 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
 
-          {/* SECCIÓN MULTIMEDIA (SOLO INTERNA) */}
           {videoUrl && (
             <div className="relative w-full aspect-video rounded-3xl overflow-hidden border border-white/10 bg-black shadow-[0_0_30px_rgba(255,49,49,0.15)]">
               {isYoutube ? (
                 <iframe
                   src={embedUrl}
-                  title="Técnica de ejercicio"
+                  title="Técnica"
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  referrerPolicy="strict-origin-when-cross-origin"
                   allowFullScreen
                   className="absolute inset-0 w-full h-full"
                 />
               ) : (
-                <img 
-                  src={videoUrl} 
-                  className="absolute inset-0 w-full h-full object-cover" 
-                  alt="Técnica" 
-                  onError={(e) => e.target.style.display = 'none'}
-                />
+                <video src={videoUrl} autoPlay muted loop className="absolute inset-0 w-full h-full object-cover" />
               )}
             </div>
           )}
 
-          {/* TIPS / OBSERVACIONES */}
           {observaciones && (
-            <div className="bg-brandRed/5 border-l-2 border-brandRed p-3 rounded-r-xl flex gap-3 items-start">
-              <Lightbulb size={14} className="text-brandRed mt-0.5 shrink-0" />
-              <p className="text-gray-300 text-[10px] font-medium leading-relaxed italic">
-                {observaciones}
-              </p>
+            <div className="bg-[#FF3131]/5 border-l-2 border-[#FF3131] p-3 rounded-r-xl flex gap-3 items-start">
+              <Lightbulb size={14} className="text-[#FF3131] mt-0.5 shrink-0" />
+              <p className="text-gray-300 text-[10px] font-medium leading-relaxed italic">{observaciones}</p>
             </div>
           )}
 
-          {/* PANEL DE CONTROL: SERIES, REPS, PESO Y TIMER */}
-          <div className="grid grid-cols-4 gap-2">
+          {/* Grid de Stats - Se ajusta según si el timer está habilitado o no */}
+          <div className={`grid gap-2 ${showRestTimer ? 'grid-cols-4' : 'grid-cols-3'}`}>
             {[
               { label: 'SER', val: s },
               { label: 'REP', val: r },
               { label: 'PES', val: p || '-' }
             ].map((stat, i) => (
               <div key={i} className="bg-white/5 p-2 rounded-2xl text-center border border-white/5 flex flex-col justify-center min-h-[50px]">
-                <p className="text-gray-600 text-[7px] font-black mb-0.5">{stat.label}</p>
+                <p className="text-gray-600 text-[7px] font-black mb-0.5 uppercase">{stat.label}</p>
                 <p className="text-white font-black text-[10px]">{stat.val}</p>
               </div>
             ))}
 
-            <div
-              onClick={startTimer}
-              className={`p-2 rounded-2xl text-center border transition-all flex flex-col justify-center min-h-[50px] ${
-                isRunning ? 'bg-brandRed border-brandRed shadow-[0_0_15px_rgba(255,49,49,0.4)]' : 'bg-white/5 border-white/5'
-              }`}
-            >
-              <p className={`${isRunning ? 'text-black' : 'text-gray-600'} text-[7px] font-black mb-0.5 uppercase`}>
-                {isRunning ? 'Rest' : 'Timer'}
-              </p>
-              <p className={`${isRunning ? 'text-black' : 'text-white'} font-black text-[10px]`}>
-                {isRunning ? `${timeLeft}s` : `${d || '60"'}`}
-              </p>
-            </div>
+            {/* TEMPORIZADOR PRO: Solo aparece si está activo en Control Maestro */}
+            {showRestTimer && (
+              <div
+                onClick={handleTimerClick}
+                className={`p-2 rounded-2xl text-center border transition-all duration-500 flex flex-col justify-center min-h-[50px] relative group/timer ${
+                  isFinished 
+                    ? 'bg-[#31FF31] border-[#31FF31] shadow-[0_0_20px_rgba(49,255,49,0.4)]' 
+                    : isRunning 
+                      ? 'bg-[#FF3131] border-[#FF3131] shadow-[0_0_15px_rgba(255,49,49,0.4)]' 
+                      : 'bg-white/5 border-white/5'
+                }`}
+              >
+                <p className={`${(isRunning || isFinished) ? 'text-black' : 'text-gray-600'} text-[7px] font-black mb-0.5 uppercase`}>
+                  {isFinished ? '¡LISTO!' : isRunning ? 'REST' : 'TIMER'}
+                </p>
+                <p className={`${(isRunning || isFinished) ? 'text-black' : 'text-white'} font-black text-[10px] leading-tight`}>
+                  {isFinished ? 'CONTINUÁ' : `${timeLeft}s`}
+                </p>
+                
+                <button 
+                  onClick={handleReset}
+                  className="absolute -top-1 -right-1 bg-white text-black rounded-full p-1 opacity-0 group-hover/timer:opacity-100 transition-opacity"
+                >
+                  <RotateCcw size={8} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

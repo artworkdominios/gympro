@@ -1,112 +1,168 @@
-import { useAuth } from '../context/AuthContext';
+import { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
+  Home, 
   Users, 
   Dumbbell, 
-  ClipboardList, 
+  UserCircle, 
+  LayoutDashboard, 
+  Settings, 
   LogOut, 
-  Home, 
-  Activity,
-  Library // <--- Importamos este para la biblioteca
+  Menu, 
+  X, 
+  ClipboardList, 
+  History,
+  ShieldCheck // <--- ESTE ES EL QUE FALTABA
 } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function Sidebar() {
-  const { logout, user } = useAuth();
+  const [isOpen, setIsOpen] = useState(false);
+  const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
-  const role = user?.role?.toLowerCase().trim() || 'alumno';
-
-  const menuConfig = {
-    administrador: [
-      { name: 'Inicio', icon: <Home size={20}/>, path: '/' },
-      { name: 'Alumnos', icon: <Users size={20}/>, path: '/alumnos' },
-      { name: 'Rutinas', icon: <ClipboardList size={20}/>, path: '/rutinas' },
-      { name: 'Biblioteca', icon: <Library size={20}/>, path: '/ejercicios' }, // <--- AGREGADO
-      { name: 'Staff', icon: <Users size={20}/>, path: '/staff' },
-      { name: 'Reg', icon: <Activity size={20}/>, path: '/log-actividad'},
-    ],
-    manager: [
-      { name: 'Inicio', icon: <Home size={20}/>, path: '/' },
-      { name: 'Alumnos', icon: <Users size={20}/>, path: '/alumnos' },
-      { name: 'Rutinas', icon: <ClipboardList size={20}/>, path: '/rutinas' },
-      { name: 'Biblioteca', icon: <Library size={20}/>, path: '/ejercicios' }, // <--- AGREGADO
-      { name: 'Reg', icon: <Activity size={20}/>, path: '/log-actividad'},
-    ],
-    profesor: [
-      { name: 'Inicio', icon: <Home size={20}/>, path: '/' },
-      { name: 'Alumnos', icon: <Users size={20}/>, path: '/alumnos' },
-      { name: 'Rutinas', icon: <ClipboardList size={20}/>, path: '/rutinas' },
-      { name: 'Biblioteca', icon: <Library size={20}/>, path: '/ejercicios' }, // <--- AGREGADO
-      { name: 'Reg', icon: <Activity size={20}/>, path: '/log-actividad'},
-    ],
-    alumno: [
-      { name: 'Inicio', icon: <Home size={20}/>, path: '/' },
-      { name: 'Rutina', icon: <Dumbbell size={20}/>, path: '/mi-rutina' },
-      { name: 'Perfil', icon: <Activity size={20}/>, path: '/perfil' },
-    ]
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error("Error al cerrar sesión", error);
+    }
   };
 
-  const currentMenu = (role === 'admin' || role === 'administrador') 
-    ? menuConfig.administrador 
-    : (menuConfig[role] || menuConfig.alumno);
+  // Definición de roles (normalizado a minúsculas)
+  const role = user?.role?.toLowerCase().trim() || 'alumno';
 
-  // ... (Resto del código del componente sigue igual)
-  return (
-    <>
-      {/* --- SIDEBAR PARA DESKTOP --- */}
-      <div className="hidden md:flex w-64 bg-[#0a0a0a] border-r border-[#FF3131]/20 p-6 flex-col h-screen sticky top-0 z-50">
-        <div className="mb-10">
-          <h1 className="text-[#FF3131] text-3xl font-black italic tracking-tighter uppercase leading-none">QST<br/>GYM</h1>
-          <p className="text-[10px] text-gray-500 uppercase tracking-[4px] font-bold mt-2">{role}</p>
+  // Configuración de navegación por rol
+  const menuItems = [
+    { 
+      path: '/', 
+      name: 'Dashboard', 
+      icon: <Home size={20} />, 
+      roles: ['administrador', 'admin', 'manager', 'profesor', 'alumno'] 
+    },
+    { 
+      path: '/mi-rutina', 
+      name: 'Mi Rutina', 
+      icon: <Dumbbell size={20} />, 
+      roles: ['alumno'] 
+    },
+    { 
+      path: '/alumnos', 
+      name: 'Alumnos', 
+      icon: <Users size={20} />, 
+      roles: ['administrador', 'admin', 'manager', 'profesor'] 
+    },
+    { 
+      path: '/ejercicios', 
+      name: 'Ejercicios', 
+      icon: <ClipboardList size={20} />, 
+      roles: ['administrador', 'admin', 'manager'] 
+    },
+    { 
+      path: '/rutinas', 
+      name: 'Rutinas', 
+      icon: <LayoutDashboard size={20} />, 
+      roles: ['administrador', 'admin', 'manager', 'profesor'] 
+    },
+    { 
+      path: '/staff', 
+      name: 'Staff / Usuarios', 
+      icon: <UserCircle size={20} />, 
+      roles: ['administrador', 'admin'] 
+    },
+    { 
+      path: '/log-actividad', 
+      name: 'Log Actividad', 
+      icon: <History size={20} />, 
+      roles: ['administrador', 'admin'] 
+    },
+    { 
+      path: '/super-admin', 
+      name: 'Control Maestro', 
+      icon: <ShieldCheck size={20} />, 
+      roles: ['administrador', 'admin'] 
+    },
+    { 
+      path: '/perfil', 
+      name: 'Mi Perfil', 
+      icon: <Settings size={20} />, 
+      roles: ['administrador', 'admin', 'manager', 'profesor', 'alumno'] 
+    },
+  ];
+
+  const filteredItems = menuItems.filter(item => item.roles.includes(role));
+
+  const NavContent = () => (
+    <div className="flex flex-col h-full bg-[#0a0a0a] border-r border-white/5 p-4">
+      <div className="mb-10 px-2">
+        <h1 className="text-2xl font-black italic text-white uppercase tracking-tighter">
+          QST<span className="text-[#FF3131]">GYM</span>
+        </h1>
+        <div className="flex items-center gap-2 mt-1">
+          <div className="w-2 h-2 rounded-full bg-[#FF3131] animate-pulse"></div>
+          <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{role} panel</span>
         </div>
-        
-        <nav className="flex-1 space-y-2">
-          {currentMenu.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Link 
-                key={item.name} 
-                to={item.path} 
-                className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
-                  isActive 
-                  ? 'bg-[#FF3131] text-white shadow-[0_0_20px_rgba(255,49,49,0.3)]' 
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {item.icon}
-                <span className="font-black uppercase text-[11px] tracking-widest">{item.name}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <button 
-          onClick={logout} 
-          className="mt-auto flex items-center gap-3 p-4 bg-white/5 rounded-xl text-gray-400 hover:text-[#FF3131] transition-all font-black uppercase text-[10px] tracking-widest"
-        >
-          <LogOut size={18} />
-          <span>Salir</span>
-        </button>
       </div>
 
-      {/* --- MENU INFERIOR PARA MÓVIL --- */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0a0a0a]/90 backdrop-blur-lg border-t border-[#FF3131]/20 px-2 py-3 z-[100] flex justify-around items-center">
-        {currentMenu.slice(0, 5).map((item) => { // Aumenté a 5 para que entre la Biblioteca en mobile si hay espacio
+      <nav className="flex-1 space-y-1">
+        {filteredItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
-            <Link 
-              key={item.name} 
-              to={item.path} 
-              className={`flex flex-col items-center gap-1 px-3 py-1 rounded-lg transition-all ${
-                isActive ? 'text-[#FF3131]' : 'text-gray-500'
+            <Link
+              key={item.path}
+              to={item.path}
+              onClick={() => setIsOpen(false)}
+              className={`flex items-center gap-3 px-4 py-4 rounded-2xl transition-all duration-300 group ${
+                isActive 
+                ? 'bg-[#FF3131] text-white shadow-lg shadow-[#FF3131]/20' 
+                : 'text-gray-500 hover:bg-white/5 hover:text-white'
               }`}
             >
-              {item.icon}
-              <span className="text-[9px] font-black uppercase tracking-tighter">{item.name}</span>
+              <span className={`${isActive ? 'text-white' : 'group-hover:text-[#FF3131] transition-colors'}`}>
+                {item.icon}
+              </span>
+              <span className="text-[10px] font-black uppercase italic tracking-wider">{item.name}</span>
             </Link>
           );
         })}
+      </nav>
+
+      <button
+        onClick={handleLogout}
+        className="mt-auto flex items-center gap-3 px-4 py-4 rounded-2xl text-gray-500 hover:bg-red-500/10 hover:text-red-500 transition-all duration-300 group"
+      >
+        <LogOut size={20} className="group-hover:rotate-12 transition-transform" />
+        <span className="text-[10px] font-black uppercase italic tracking-wider">Cerrar Sesión</span>
+      </button>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Mobile Nav Header */}
+      <div className="md:hidden flex items-center justify-between p-4 bg-[#0a0a0a] border-b border-white/5 sticky top-0 z-50">
+        <h1 className="text-xl font-black italic text-white uppercase">QST<span className="text-[#FF3131]">GYM</span></h1>
+        <button onClick={() => setIsOpen(!isOpen)} className="text-white p-2">
+          {isOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
       </div>
+
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:block w-72 h-screen sticky top-0">
+        <NavContent />
+      </aside>
+
+      {/* Mobile Sidebar Overlay */}
+      {isOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsOpen(false)}></div>
+          <aside className="fixed inset-y-0 left-0 w-72 shadow-2xl animate-in slide-in-from-left duration-300">
+            <NavContent />
+          </aside>
+        </div>
+      )}
     </>
   );
 }
