@@ -12,13 +12,14 @@ import {
   X, 
   ClipboardList, 
   History,
-  ShieldCheck // <--- ESTE ES EL QUE FALTABA
+  ShieldCheck,
+  BarChart3 // <--- Ícono para Analytics
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, features } = useAuth(); // Extraemos features
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -31,10 +32,8 @@ export default function Sidebar() {
     }
   };
 
-  // Definición de roles (normalizado a minúsculas)
   const role = user?.role?.toLowerCase().trim() || 'alumno';
 
-  // Configuración de navegación por rol
   const menuItems = [
     { 
       path: '/', 
@@ -47,6 +46,13 @@ export default function Sidebar() {
       name: 'Mi Rutina', 
       icon: <Dumbbell size={20} />, 
       roles: ['alumno'] 
+    },
+    { 
+      path: '/analytics', 
+      name: 'Analytics', 
+      icon: <BarChart3 size={20} />, 
+      roles: ['administrador', 'admin', 'manager'],
+      feature: 'analyticsEnabled' // <--- Requiere esta feature activa
     },
     { 
       path: '/alumnos', 
@@ -92,7 +98,12 @@ export default function Sidebar() {
     },
   ];
 
-  const filteredItems = menuItems.filter(item => item.roles.includes(role));
+  // FILTRADO DINÁMICO: Por Rol Y por Feature activa
+  const filteredItems = menuItems.filter(item => {
+    const hasRole = item.roles.includes(role);
+    const featureActive = item.feature ? features?.[item.feature] : true;
+    return hasRole && featureActive;
+  });
 
   const NavContent = () => (
     <div className="flex flex-col h-full bg-[#0a0a0a] border-r border-white/5 p-4">
@@ -141,7 +152,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile Nav Header */}
       <div className="md:hidden flex items-center justify-between p-4 bg-[#0a0a0a] border-b border-white/5 sticky top-0 z-50">
         <h1 className="text-xl font-black italic text-white uppercase">QST<span className="text-[#FF3131]">GYM</span></h1>
         <button onClick={() => setIsOpen(!isOpen)} className="text-white p-2">
@@ -149,12 +159,10 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Desktop Sidebar */}
       <aside className="hidden md:block w-72 h-screen sticky top-0">
         <NavContent />
       </aside>
 
-      {/* Mobile Sidebar Overlay */}
       {isOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsOpen(false)}></div>

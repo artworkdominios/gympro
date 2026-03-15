@@ -10,14 +10,14 @@ import RutinasPage from './pages/RutinasPage.jsx';
 import MiRutinaPage from './pages/MiRutinaPage.jsx'; 
 import PerfilPage from './pages/PerfilPage';
 import LogActividadPage from './pages/LogActividadPage';
-import SuperAdminPage from './pages/SuperAdminPage'; // Asegurate de crear este archivo
+import SuperAdminPage from './pages/SuperAdminPage';
+import AnalyticsPage from './pages/AnaliticasPage.jsx';
 
-// --- CAMBIO AQUÍ: Agregamos flex-col para móvil y md:flex-row para PC ---
+
 function AppLayout({ children }) {
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-[#050505] text-white">
       <Sidebar />
-      {/* Añadimos padding inferior (pb-24) en móvil para que el menú no tape el contenido */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8">
         {children}
       </main>
@@ -25,9 +25,8 @@ function AppLayout({ children }) {
   );
 }
 
-// Protector de rutas: Si no hay usuario, manda al Login
-function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
+function ProtectedRoute({ children, requireFeature = null }) {
+  const { user, loading, features } = useAuth();
   
   if (loading) return (
     <div className="bg-[#050505] min-h-screen flex items-center justify-center">
@@ -36,11 +35,15 @@ function ProtectedRoute({ children }) {
   );
   
   if (!user) return <Navigate to="/login" replace />;
+
+  // Si la ruta requiere una feature específica y está apagada, redirige al home
+  if (requireFeature && features && !features[requireFeature]) {
+    return <Navigate to="/" replace />;
+  }
   
   return <AppLayout>{children}</AppLayout>;
 }
 
-// Componente simple para páginas que aún no creamos
 const PlaceholderPage = ({ title }) => (
   <div className="p-10 border border-dashed border-[#FF3131]/20 rounded-2xl text-center">
     <h2 className="text-2xl font-black italic text-white uppercase">{title}</h2>
@@ -63,6 +66,17 @@ export default function App() {
           <Route path="/perfil" element={<ProtectedRoute><PerfilPage /></ProtectedRoute>} />
           <Route path="/log-actividad" element={<ProtectedRoute><LogActividadPage /></ProtectedRoute>} />
           <Route path="/super-admin" element={<ProtectedRoute><SuperAdminPage /></ProtectedRoute>} />
+          
+          {/* RUTA DE ANALYTICS PROTEGIDA */}
+          <Route 
+            path="/analytics" 
+            element={
+              <ProtectedRoute requireFeature="analyticsEnabled">
+                <AnalyticsPage />
+              </ProtectedRoute>
+            } 
+          />
+
           <Route path="/config" element={<ProtectedRoute><PlaceholderPage title="Configuración" /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

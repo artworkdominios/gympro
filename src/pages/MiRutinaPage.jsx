@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+// Importamos doc y updateDoc para actualizar el perfil del usuario
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { Dumbbell, Loader2, Flame, Timer, AlertTriangle, RotateCcw, HeartPulse } from 'lucide-react';
 import ExerciseItem from '../components/ui/ExerciseItem.jsx';
 import GymButton from '../components/ui/GymButton.jsx';
@@ -22,7 +23,6 @@ export default function MiRutinaPage() {
   const [seconds, setSeconds] = useState(0);
   const [isActive, setIsActive] = useState(false);
 
-  // Cálculo de días para vencimiento de Apto Médico
   const getDiasApto = () => {
     if (!user?.fecha_apto) return null;
     const hoy = new Date();
@@ -88,15 +88,24 @@ export default function MiRutinaPage() {
     const ejerciciosDelDia = rutina.bloques[bloqueActivoIdx].ejercicios;
     
     try {
+      const timestampActual = serverTimestamp();
+
+      // 1. Guardar el registro de asistencia técnica
       await addDoc(collection(db, "asistencia_entrenamientos"), {
         alumnoId: user.uid,
         alumnoNombre: user.nombre || 'Alumno',
-        fecha: serverTimestamp(),
+        fecha: timestampActual,
         diaNombre: rutina.bloques[bloqueActivoIdx].nombreDia,
         ejerciciosRealizados: completados,
         totalEjercicios: ejerciciosDelDia.length,
         rutinaId: rutina.id,
         tiempoTotal: seconds
+      });
+
+      // 2. ACTUALIZACIÓN CRÍTICA: Guardar la fecha en el perfil del usuario para Analíticas
+      const userRef = doc(db, "users", user.uid);
+      await updateDoc(userRef, {
+        ultima_asistencia: timestampActual
       });
 
       if (window.navigator.vibrate) {
@@ -111,6 +120,7 @@ export default function MiRutinaPage() {
     }
     catch (e) {
       setGuardando(false);
+      console.error("Error al finalizar:", e);
       alert("Error al guardar: " + e.message);
     }
   };
@@ -129,9 +139,7 @@ export default function MiRutinaPage() {
   return (
     <div className="relative max-w-md mx-auto p-4 pb-24 animate-in fade-in slide-in-from-bottom-4 duration-700">
       
-      {/* CONTENEDOR DE ALERTAS DINÁMICAS */}
       <div className="space-y-3 mb-6">
-        {/* Alerta de Cuota */}
         {features.notificacionesCuotaEnabled && user?.diasParaVencer !== null && user.diasParaVencer <= 5 && (
           <div className="bg-[#FF3131]/10 border border-[#FF3131]/50 p-4 rounded-2xl flex items-center gap-4 animate-in slide-in-from-top duration-500">
             <AlertTriangle className="text-[#FF3131]" size={20} />
@@ -144,7 +152,6 @@ export default function MiRutinaPage() {
           </div>
         )}
 
-        {/* Alerta de Apto Médico */}
         {features.aptoMedicoEnabled && diasApto !== null && diasApto <= 30 && (
           <div className="bg-blue-500/10 border border-blue-500/50 p-4 rounded-2xl flex items-center gap-4 animate-in slide-in-from-top duration-500">
             <HeartPulse className="text-blue-500" size={25} />
