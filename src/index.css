@@ -1,51 +1,97 @@
 @import "tailwindcss";
 
 /* QSTGYM - Dark Mode Neón Theme */
+/* Nota: En Tailwind v4, las variables se definen directamente en CSS o bajo @theme */
 @theme {
-  /* Fondo principal */
   --color-bg-primary: #050505;
   --color-bg-secondary: #0a0a0a;
   --color-bg-card: #0f0f0f;
-  
-  /* Acentos rojos neón */
   --color-neon: #FF3131;
   --color-neon-dim: #cc2727;
   --color-neon-bright: #ff4d4d;
-  
-  /* Glow / Resplandor */
   --shadow-glow: 0 0 20px rgba(255, 49, 49, 0.4);
   --shadow-glow-strong: 0 0 30px rgba(255, 49, 49, 0.6);
   --shadow-glow-subtle: 0 0 10px rgba(255, 49, 49, 0.2);
-  
-  /* Texto */
   --color-text-primary: #ffffff;
   --color-text-secondary: #a0a0a0;
   --color-text-muted: #666666;
 }
 
 @layer base {
+  *, ::before, ::after {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent; /* Quita el recuadro azul al tocar en móviles */
+  }
+
+  :root {
+    /* Variables de área segura con fallback de 0px */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+  }
+
+  html {
+    height: 100dvh; 
+    width: 100%;
+    overflow: hidden;
+    background-color: #050505; /* Evita destellos blancos al cargar */
+  }
+
   body {
     @apply bg-[#050505] text-white antialiased;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    margin: 0;
+    padding: 0;
+    height: 100dvh;
+    width: 100%;
+    overflow: hidden; /* El scroll lo maneja el MAIN en App.jsx */
+    
+    /* Evita que el usuario "arrastre" y vea el fondo del navegador en iOS */
+    overscroll-behavior: none;
+    position: fixed; /* Bloqueo total para comportamiento de App Nativa */
+  }
+
+  #root {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    /* Aplicamos el padding del notch aquí o en el layout principal */
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+  }
+
+  img, video {
+    max-width: 100%;
+    height: auto;
+    display: block;
   }
 }
 
-/* Utilidades de glow para componentes */
 @layer utilities {
-  .glow-neon {
-    box-shadow: 0 0 20px rgba(255, 49, 49, 0.4);
+  .glow-neon { box-shadow: var(--shadow-glow); }
+  .glow-neon-strong { box-shadow: var(--shadow-glow-strong); }
+  .text-glow { text-shadow: 0 0 10px rgba(255, 49, 49, 0.5); }
+  
+  /* Utilidad para forzar el padding de seguridad si un elemento lo necesita */
+  .p-safe {
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
   }
-  .glow-neon-strong {
-    box-shadow: 0 0 30px rgba(255, 49, 49, 0.6);
-  }
-  .glow-neon-subtle {
-    box-shadow: 0 0 10px rgba(255, 49, 49, 0.2);
-  }
-  .text-glow {
-    text-shadow: 0 0 10px rgba(255, 49, 49, 0.5);
-  }
-  .border-neon {
-    border-color: #FF3131;
-    box-shadow: 0 0 15px rgba(255, 49, 49, 0.3);
-  }
+}
+/* Esto asegura que el fondo de la App sea negro absoluto incluso detrás del notch */
+html, body {
+  background-color: #050505 !important;
+}
+
+/* Si usas un Sidebar o un Header, aplicales esto para que no se encimen con el reloj */
+.safe-header {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-footer {
+  padding-bottom: env(safe-area-inset-bottom);
 }

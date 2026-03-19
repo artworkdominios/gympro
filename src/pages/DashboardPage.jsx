@@ -1,37 +1,33 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Link } from 'react-router-dom'; 
+import { Link } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import { Users, Shield, Flame, CalendarCheck, CreditCard, AlertTriangle, Activity, X, Search, ChevronRight, BarChart3 } from 'lucide-react';
+import { Users, Shield, Flame, CalendarCheck, CreditCard, AlertTriangle, Activity, X, Search, ChevronRight, BarChart3, HeartPulse } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { user, features } = useAuth();
+  const { user, features, isVencido, isAptoVencido } = useAuth();
   const [profesCount, setProfesCount] = useState(0);
   const [alumnosTotales, setAlumnosTotales] = useState(0);
-  const [alumnosPendientes, setAlumnosPendientes] = useState([]); 
+  const [alumnosPendientes, setAlumnosPendientes] = useState([]);
   const [racha, setRacha] = useState(0);
-  const [diasRestantes, setDiasRestantes] = useState(null);
-  
+
   const [showModal, setShowModal] = useState(false);
   const [busquedaModal, setBusquedaModal] = useState('');
 
   const role = user?.role?.toLowerCase().trim() || '';
 
-  // 1. Lógica para Admin / Manager (Operativo)
+  // 1. Lógica para Admin / Manager
   useEffect(() => {
     if (['manager', 'admin', 'administrador'].includes(role)) {
-      
-      // Contador de Profesores
       const qProfes = query(collection(db, "users"), where("role", "in", ["profesor", "profesor ", "PROFESOR"]));
       const unsubProfes = onSnapshot(qProfes, (snap) => setProfesCount(snap.size));
 
-      // Contador de Alumnos y Vencidos
       const qAlumnos = query(collection(db, "users"), where("role", "==", "alumno"));
       const unsubAlumnos = onSnapshot(qAlumnos, (snap) => {
         const todos = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAlumnosTotales(todos.length);
-        
+
         const hoy = new Date();
         const pendientes = todos.filter(alumno => {
           if (!alumno.fecha_vencimiento) return true;
@@ -63,17 +59,11 @@ export default function DashboardPage() {
         setRacha(diasUnicos.size);
       });
 
-      if (user?.fecha_vencimiento) {
-        const hoy = new Date();
-        const vencimiento = new Date(user.fecha_vencimiento);
-        setDiasRestantes(Math.ceil((vencimiento - hoy) / (1000 * 60 * 60 * 24)));
-      }
-
       return () => unsubRacha();
     }
-  }, [role, user]);
+  }, [role, user?.uid]);
 
-  const alumnosFiltradosModal = alumnosPendientes.filter(a => 
+  const alumnosFiltradosModal = alumnosPendientes.filter(a =>
     a.nombre?.toLowerCase().includes(busquedaModal.toLowerCase()) || a.dni?.includes(busquedaModal)
   );
 
@@ -85,13 +75,13 @@ export default function DashboardPage() {
             <div className="absolute top-0 right-0 p-10 opacity-5">
               <Shield size={120} className="text-white" />
             </div>
-            
+
             <header className="relative z-10">
               <h1 className="text-5xl font-black italic text-white uppercase tracking-tighter mb-4">
                 HOLA, <span className="text-[#FF3131]">{user?.nombre?.split(' ')[0]}</span>
               </h1>
               <p className="text-gray-500 text-[10px] font-black uppercase tracking-[5px] mb-12 italic">Panel Operativo</p>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex items-center gap-5">
                   <div className="bg-blue-600 p-4 rounded-2xl text-white"><Activity size={20} /></div>
@@ -120,7 +110,6 @@ export default function DashboardPage() {
             </header>
           </div>
 
-          {/* ACCESO A ANALYTICS (Si está activo) */}
           {features.analyticsEnabled && (
             <Link to="/analytics" className="block p-8 bg-blue-600/10 border border-blue-500/20 rounded-[30px] group hover:border-blue-500/50 transition-all">
               <div className="flex justify-between items-center">
@@ -136,7 +125,6 @@ export default function DashboardPage() {
             </Link>
           )}
 
-          {/* MODAL VENCIDOS */}
           {showModal && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-300">
               <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-lg rounded-[30px] overflow-hidden flex flex-col max-h-[80vh]">
@@ -147,9 +135,9 @@ export default function DashboardPage() {
                 <div className="p-4 bg-black/50">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
-                    <input 
-                      type="text" 
-                      placeholder="BUSCAR ALUMNO..." 
+                    <input
+                      type="text"
+                      placeholder="BUSCAR ALUMNO..."
                       className="w-full bg-black border border-white/5 rounded-xl py-3 pl-10 text-white text-[10px] font-black uppercase outline-none focus:border-yellow-500/50"
                       value={busquedaModal}
                       onChange={(e) => setBusquedaModal(e.target.value)}
@@ -185,10 +173,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6">
           <div className="p-10 bg-[#0a0a0a] border border-white/5 rounded-[40px]">
             <h2 className="text-[#FF3131] font-black uppercase text-[10px] mb-4 tracking-widest italic">Instructor Panel</h2>
-            <p className="text-white text-3xl font-black italic mb-8 uppercase leading-tight">Tienes {alumnosTotales} alumnos <br/> bajo tu supervisión</p>
-            <Link to="/alumnos" className="inline-flex items-center gap-3 bg-white text-black font-black px-10 py-4 rounded-2xl uppercase italic text-[11px] hover:bg-[#FF3131] hover:text-white transition-all shadow-xl">
-              Ver listado de alumnos <ChevronRight size={16}/>
-            </Link>
+            <p className="text-white text-3xl font-black italic mb-8 uppercase leading-tight">Tienes {alumnosTotales} alumnos <br /> con tu rutina</p>
           </div>
         </div>
       );
@@ -197,37 +182,78 @@ export default function DashboardPage() {
     if (role === 'alumno') {
       return (
         <div className="space-y-6">
-          {features.notificacionesCuotaEnabled && diasRestantes !== null && (
-            <div className={`p-5 rounded-3xl border flex items-center justify-between ${diasRestantes <= 5 ? 'bg-red-500/10 border-red-500/30' : 'bg-green-500/10 border-green-500/30'}`}>
-              <div className="flex items-center gap-4">
-                <div className={diasRestantes <= 5 ? 'text-red-500' : 'text-green-500'}><CreditCard size={24}/></div>
-                <div>
-                  <p className="text-[9px] font-black uppercase text-gray-500">Membresía</p>
-                  <p className="text-white text-xs font-black uppercase tracking-tight">{diasRestantes <= 0 ? 'Vencida hoy' : `Vence en ${diasRestantes} días`}</p>
+
+          {/* SECCIÓN ALERTAS UNIFICADA */}
+          <div className="space-y-6 mb-6">
+            {/* A. CARTEL DE APTO MÉDICO */}
+
+            {features.aptoMedicoEnabled && (
+              <div className="bg-blue-500/10 border border-blue-500/50 p-4 rounded-2xl flex items-center gap-4 animate-in slide-in-from-top duration-500">
+                <HeartPulse
+                  className={`text-blue-500 ${(isAptoVencido || (user?.diasApto !== null && user?.diasApto <= 7)) ? 'animate-pulse' : ''}`}
+                  size={25}
+                />
+                <div className="flex-1">
+                  <p className="text-white font-black text-[15px] uppercase tracking-tighter">Apto Médico</p>
+
+                  {/* 1. Lógica del mensaje principal */}
+                  <p className="text-blue-500 font-bold text-[10px] uppercase italic leading-tight">
+                    {isAptoVencido
+                      ? "CERTIFICADO VENCIDO / PENDIENTE"
+                      : (user?.diasApto !== null && user?.diasApto <= 30
+                        ? `ATENCIÓN: VENCE EN ${user.diasApto} DÍAS`
+                        : "APTO MÉDICO VIGENTE")}
+                  </p>
+
+                  {/* 2. Lógica de la FECHA (Sin condiciones de vencimiento) */}
+                  <p className="text-gray-500 font-black text-[12px] uppercase mt-1 tracking-widest italic">
+                    Vence el: <span className="text-blue-400">
+                      {user?.fecha_apto
+                        ? new Date(user.fecha_apto + 'T00:00:00').toLocaleDateString('es-AR')
+                        : 'SIN FECHA CARGADA'}
+                    </span>
+                  </p>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+            {/* B. CARTEL DE CUOTA  */}
+            {features.notificacionesCuotaEnabled && user?.diasParaVencer !== null && user.diasParaVencer <= 7 && (
+              <div className={`p-4 rounded-2xl border flex items-center justify-between transition-all duration-500 
+        ${user.diasParaVencer <= 3 ? 'animate-cuota-blink border-red-500/50 bg-red-500/10' : 'bg-[#0a0a0a] border-white/5'}`}>
+                <div className="flex items-center gap-4">
+                  <CreditCard className={user.diasParaVencer <= 3 ? 'text-red-500' : 'text-green-500'} size={20} />
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-gray-500">Membresía</p>
+                    <p className="text-white text-[12px] font-black uppercase italic">
+                      {isVencido ? 'MEMBRESÍA VENCIDA' : `VENCE EN ${user.diasParaVencer} DÍAS`}
+                    </p>
+                  </div>
+                </div>
+                {user.diasParaVencer <= 3 && <AlertTriangle size={18} className="text-red-500 animate-bounce" />}
+              </div>
+            )}
+          </div>
+
 
           <div className="p-10 bg-[#111] border-l-8 border-[#FF3131] rounded-3xl shadow-2xl relative overflow-hidden">
-             <div className="relative z-10">
-                <h1 className="text-4xl font-black text-white uppercase italic mb-2">Entrenar <span className="text-[#FF3131]">Hoy</span></h1>
-                <p className="text-gray-500 text-[10px] font-bold uppercase mb-8 tracking-[3px]">Tus rutinas personalizadas listas</p>
-                <Link to="/mi-rutina" className="bg-[#FF3131] text-white font-black px-10 py-4 rounded-full uppercase italic text-[11px] hover:scale-105 transition-transform inline-block shadow-lg shadow-[#FF3131]/20">Abrir mi plan</Link>
-             </div>
-             <Flame className="absolute top-1/2 right-[-20px] -translate-y-1/2 text-white/5" size={180} />
+            <div className="relative z-10">
+              <h1 className="text-4xl font-black text-white uppercase italic mb-2">Entrenar <span className="text-[#FF3131]">Hoy</span></h1>
+              <p className="text-gray-500 text-[10px] font-bold uppercase mb-8 tracking-[3px]">Tu rutina personalizada lista</p>
+              <Link to="/mi-rutina" className="bg-[#FF3131] text-white font-black px-10 py-4 rounded-full uppercase italic text-[11px] hover:scale-105 transition-transform inline-block shadow-lg shadow-[#FF3131]/20">Abrir mi plan</Link>
+            </div>
+            <Flame className="absolute top-1/2 right-[-20px] -translate-y-1/2 text-white/5" size={180} />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[35px] text-center">
               <Flame size={40} className={`mx-auto mb-3 ${racha > 0 ? "text-orange-500 animate-pulse" : "text-gray-800"}`} />
               <p className="text-white text-3xl font-black italic leading-none">{racha}</p>
-              <p className="text-gray-500 text-[8px] font-black uppercase mt-1 tracking-widest">Racha de días</p>
+              <p className="text-gray-500 text-[8px] font-black uppercase mt-1 tracking-widest">Días Entrenados</p>
             </div>
             <div className="bg-[#0a0a0a] border border-white/5 p-8 rounded-[35px] text-center">
               <CalendarCheck size={40} className="mx-auto mb-3 text-[#FF3131]" />
-              <p className="text-white text-[10px] font-black uppercase leading-tight">¡{racha >= 3 ? 'IMPARABLE' : 'VAMOS' }!</p>
-              <p className="text-gray-500 text-[8px] font-black uppercase mt-1 tracking-widest">Estado físico</p>
+              <p className="text-white text-[10px] font-black uppercase leading-tight">¡{racha >= 3 ? 'IMPARABLE!' : 'VAMOS'}!</p>
+              <p className="text-gray-500 text-[8px] font-black uppercase mt-1 tracking-widest">Completa la Semana!</p>
             </div>
           </div>
         </div>
@@ -244,7 +270,7 @@ export default function DashboardPage() {
             <div className="h-[2px] w-8 bg-[#FF3131]"></div>
             <span className="text-[#FF3131] font-black uppercase tracking-[4px] text-[9px]">QSTGYM SISTEMAS</span>
           </div>
-          <h1 className="text-4xl font-black text-white italic tracking-tighter uppercase">{role} <span className="text-gray-800">Panel</span></h1>
+          <h1 className="text-4xl font-black text-gray-500 italic tracking-tighter uppercase"><span className="text-white"> Bienvenida/o </span>{user?.nombre} </h1>
         </div>
       </header>
 
@@ -253,6 +279,14 @@ export default function DashboardPage() {
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }
+
+        @keyframes cuota-blink {
+          0%, 100% { background-color: rgba(239, 68, 68, 0.05); }
+          50% { background-color: rgba(239, 68, 68, 0.25); }
+        }
+        .animate-cuota-blink {
+          animation: cuota-blink 1.2s infinite ease-in-out;
+        }
       `}</style>
     </div>
   );

@@ -15,14 +15,14 @@ export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onEx
     if (!url || !isYoutube) return url;
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
+    // Agregamos playsinline=1 para YouTube
     return (match && match[2].length === 11) 
-      ? `https://www.youtube.com/embed/${match[2]}?autoplay=1&mute=1&modestbranding=1&rel=0&iv_load_policy=3` 
+      ? `https://www.youtube.com/embed/${match[2]}?autoplay=1&mute=1&modestbranding=1&rel=0&iv_load_policy=3&playsinline=1` 
       : url;
   };
 
   const embedUrl = getEmbedUrl(videoUrl);
 
-  // Lógica del Temporizador
   useEffect(() => {
     let interval;
     if (isRunning && timeLeft > 0) {
@@ -31,13 +31,11 @@ export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onEx
     } else if (timeLeft === 0 && isRunning) {
       setIsRunning(false);
       setIsFinished(true);
-      clearInterval(interval);
       if (window.navigator.vibrate) window.navigator.vibrate(200);
     }
     return () => clearInterval(interval);
   }, [isRunning, timeLeft]);
 
-  // Resetear al cerrar/abrir o cambiar descanso
   useEffect(() => {
     if (!isRunning) {
       setTimeLeft(parseInt(d) || 60);
@@ -47,7 +45,7 @@ export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onEx
 
   const handleTimerClick = (e) => {
     e.stopPropagation();
-    if (!showRestTimer) return; // Seguridad extra
+    if (!showRestTimer) return;
     if (isFinished || timeLeft === 0) {
       setIsFinished(false);
       setTimeLeft(parseInt(d) || 60);
@@ -76,12 +74,11 @@ export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onEx
           >
             {isDone ? <CheckCircle2 size={16} className="text-black" /> : <Circle size={16} className="text-gray-800" />}
           </button>
-
           <div>
             <h3 className={`text-lg font-black italic uppercase leading-tight ${isDone ? 'text-gray-600 line-through' : 'text-white'}`}>
               {nombre}
             </h3>
-            <p className="text-[#FF3131] text-[8px] font-black uppercase tracking-widest mt-1">{grupo}</p>
+            <p className="text-[#FF3131] text-[12px] font-black uppercase tracking-widest mt-1">{grupo}</p>
           </div>
         </div>
         <ChevronDown size={18} className={`text-gray-600 transition-transform ${isOpen ? 'rotate-180 text-[#FF3131]' : ''}`} />
@@ -89,7 +86,6 @@ export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onEx
 
       {isOpen && (
         <div className="mt-5 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-
           {videoUrl && (
             <div className="relative w-full aspect-video rounded-3xl overflow-hidden border border-white/10 bg-black shadow-[0_0_30px_rgba(255,49,49,0.15)]">
               {isYoutube ? (
@@ -102,7 +98,15 @@ export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onEx
                   className="absolute inset-0 w-full h-full"
                 />
               ) : (
-                <video src={videoUrl} autoPlay muted loop className="absolute inset-0 w-full h-full object-cover" />
+                <video 
+                  src={videoUrl} 
+                  autoPlay 
+                  muted 
+                  loop 
+                  playsInline           /* EVITA FULLSCREEN EN IOS */
+                  webkit-playsinline="true" 
+                  className="absolute inset-0 w-full h-full object-cover" 
+                />
               )}
             </div>
           )}
@@ -114,42 +118,34 @@ export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onEx
             </div>
           )}
 
-          {/* Grid de Stats - Se ajusta según si el timer está habilitado o no */}
-          <div className={`grid gap-2 ${showRestTimer ? 'grid-cols-4' : 'grid-cols-3'}`}>
+          <div className={` grid gap-2 ${showRestTimer ? 'grid-cols-3' : 'grid-cols-3'}`}>
             {[
               { label: 'SER', val: s },
               { label: 'REP', val: r },
-              { label: 'PES', val: p || '-' }
+              /* { label: 'PES', val: p || '-' } */
             ].map((stat, i) => (
               <div key={i} className="bg-white/5 p-2 rounded-2xl text-center border border-white/5 flex flex-col justify-center min-h-[50px]">
-                <p className="text-gray-600 text-[7px] font-black mb-0.5 uppercase">{stat.label}</p>
-                <p className="text-white font-black text-[10px]">{stat.val}</p>
+                <p className="text-gray-600 text-[16px] font-black mb-0.5 uppercase">{stat.label}</p>
+                <p className="text-white font-black text-[20px]">{stat.val}</p>
               </div>
             ))}
 
-            {/* TEMPORIZADOR PRO: Solo aparece si está activo en Control Maestro */}
             {showRestTimer && (
               <div
                 onClick={handleTimerClick}
-                className={`p-2 rounded-2xl text-center border transition-all duration-500 flex flex-col justify-center min-h-[50px] relative group/timer ${
-                  isFinished 
-                    ? 'bg-[#31FF31] border-[#31FF31] shadow-[0_0_20px_rgba(49,255,49,0.4)]' 
-                    : isRunning 
-                      ? 'bg-[#FF3131] border-[#FF3131] shadow-[0_0_15px_rgba(255,49,49,0.4)]' 
-                      : 'bg-white/5 border-white/5'
+                className={`p-2 text-xl rounded-2xl text-center border transition-all duration-500 flex flex-col justify-center min-h-[50px] relative group/timer ${
+                  isFinished ? 'bg-[#31FF31] border-[#31FF31] shadow-[0_0_20px_rgba(49,255,49,0.4)]' 
+                  : isRunning ? 'bg-[#FF3131] border-[#FF3131] shadow-[0_0_15px_rgba(255,49,49,0.4)]' 
+                  : 'bg-white/5 border-white/5'
                 }`}
               >
-                <p className={`${(isRunning || isFinished) ? 'text-black' : 'text-gray-600'} text-[7px] font-black mb-0.5 uppercase`}>
+                <p className={`${(isRunning || isFinished) ? 'text-black' : 'text-gray-600'} text-[16px] font-black mb-0.5 uppercase`}>
                   {isFinished ? '¡LISTO!' : isRunning ? 'REST' : 'TIMER'}
                 </p>
-                <p className={`${(isRunning || isFinished) ? 'text-black' : 'text-white'} font-black text-[10px] leading-tight`}>
+                <p className={`${(isRunning || isFinished) ? 'text-black' : 'text-white'} font-black text-[16px] leading-tight`}>
                   {isFinished ? 'CONTINUÁ' : `${timeLeft}s`}
                 </p>
-                
-                <button 
-                  onClick={handleReset}
-                  className="absolute -top-1 -right-1 bg-white text-black rounded-full p-1 opacity-0 group-hover/timer:opacity-100 transition-opacity"
-                >
+                <button onClick={handleReset} className="absolute -top-1 -right-1 bg-white text-black rounded-full p-1 opacity-0 group-hover/timer:opacity-100 transition-opacity">
                   <RotateCcw size={8} />
                 </button>
               </div>

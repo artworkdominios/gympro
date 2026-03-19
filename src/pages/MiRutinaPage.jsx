@@ -172,6 +172,10 @@ export default function MiRutinaPage() {
         <h1 className="text-5xl font-black italic text-white uppercase tracking-tighter">
           MI <span className="text-[#FF3131]">PLAN</span>
         </h1>
+        <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mt-2 flex items-center gap-2">
+      <span className="h-1 w-4 bg-[#FF3131]"></span>
+      Rutina creada por: <span className="text-white italic">{rutina.nombreProfesor}</span>
+    </p>
         
         {features.timerEnabled && (
           <div className="mt-4 flex flex-col items-center animate-in zoom-in duration-300">

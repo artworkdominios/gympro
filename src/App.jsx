@@ -13,30 +13,50 @@ import LogActividadPage from './pages/LogActividadPage';
 import SuperAdminPage from './pages/SuperAdminPage';
 import AnalyticsPage from './pages/AnaliticasPage.jsx';
 
-
 function AppLayout({ children }) {
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-[#050505] text-white">
+    <div className="flex flex-col md:flex-row h-screen w-full bg-[#050505] text-white overflow-hidden">
       <Sidebar />
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8">
-        {children}
+      {/* 1. Quitamos content-center (que empujaba el contenido hacia arriba/abajo)
+          2. Aseguramos que el scroll sea vertical y empiece desde el inicio (content-start)
+      */}
+      <main 
+        id="main-scroll" 
+        className="flex-1 h-full w-full overflow-y-auto overflow-x-hidden pt-[env(safe-area-inset-top)] pb-24 md:pb-8"
+      >
+        <div className="w-full max-w-7xl mx-auto px-4 md:px-10 py-8 animate-in fade-in zoom-in duration-500 flex flex-col items-center">
+          <div className="w-full">
+            {children}
+          </div>
+        </div>
       </main>
     </div>
   );
 }
 
-function ProtectedRoute({ children, requireFeature = null }) {
+// PROTECCIÓN POR ROLES Y MEMBRESÍA
+function ProtectedRoute({ children, allowedRoles = [], requireFeature = null, blockIfVencido = false }) {
   const { user, loading, features } = useAuth();
   
   if (loading) return (
-    <div className="bg-[#050505] min-h-screen flex items-center justify-center">
-      <div className="text-[#FF3131] font-black animate-pulse uppercase tracking-[5px]">Cargando QST GYM APP...</div>
+    <div className="bg-[#050505] h-[100dvh] w-full flex items-center justify-center">
+      <div className="text-[#FF3131] font-black animate-pulse uppercase tracking-[5px] text-[10px]">Cargando QST GYM...</div>
     </div>
   );
   
   if (!user) return <Navigate to="/login" replace />;
 
-  // Si la ruta requiere una feature específica y está apagada, redirige al home
+  // BLOQUEO POR MEMBRESÍA VENCIDA: 
+  // Si la ruta pide bloquear vencidos (como mi-rutina) y el usuario está vencido, lo mandamos al perfil.
+  if (blockIfVencido && user.role === 'alumno' && user.isVencido) {
+    return <Navigate to="/perfil" replace />;
+  }
+
+  // Si la ruta tiene roles definidos y el usuario no tiene uno de esos roles, rebota al dashboard
+  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+
   if (requireFeature && features && !features[requireFeature]) {
     return <Navigate to="/" replace />;
   }
@@ -45,9 +65,9 @@ function ProtectedRoute({ children, requireFeature = null }) {
 }
 
 const PlaceholderPage = ({ title }) => (
-  <div className="p-10 border border-dashed border-[#FF3131]/20 rounded-2xl text-center">
+  <div className="flex flex-col items-center justify-center text-center p-10 border border-dashed border-[#FF3131]/20 rounded-[40px] bg-[#0a0a0a]">
     <h2 className="text-2xl font-black italic text-white uppercase">{title}</h2>
-    <p className="text-gray-500 mt-2">Sección en construcción para QSTGYM.</p>
+    <p className="text-gray-500 mt-2 text-[10px] uppercase tracking-widest">Sección en desarrollo</p>
   </div>
 );
 
@@ -57,27 +77,51 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-          <Route path="/alumnos" element={<ProtectedRoute><AlumnosPage /></ProtectedRoute>} />
-          <Route path="/ejercicios" element={<ProtectedRoute><EjerciciosPage /></ProtectedRoute>} />
-          <Route path="/staff" element={<ProtectedRoute><UsuariosPage /></ProtectedRoute>} />
-          <Route path="/rutinas" element={<ProtectedRoute><RutinasPage /></ProtectedRoute>} />
-          <Route path="/mi-rutina" element={<ProtectedRoute><MiRutinaPage /></ProtectedRoute>} />
-          <Route path="/perfil" element={<ProtectedRoute><PerfilPage /></ProtectedRoute>} />
-          <Route path="/log-actividad" element={<ProtectedRoute><LogActividadPage /></ProtectedRoute>} />
-          <Route path="/super-admin" element={<ProtectedRoute><SuperAdminPage /></ProtectedRoute>} />
           
-          {/* RUTA DE ANALYTICS PROTEGIDA */}
+          {/* ACCESO GENERAL (Logueados) */}
+          <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+          <Route path="/perfil" element={<ProtectedRoute><PerfilPage /></ProtectedRoute>} />
+
+          {/* SOLO ALUMNOS - Agregamos 'blockIfVencido' para que no entren si deben la cuota */}
+          <Route path="/mi-rutina" element={
+            <ProtectedRoute allowedRoles={['alumno', 'admin']} blockIfVencido={true}>
+              <MiRutinaPage />
+            </ProtectedRoute>
+          } />
+
+          {/* GESTIÓN DE ALUMNOS (Admin, Manager, Profesor) */}
+          <Route path="/alumnos" element={
+            <ProtectedRoute allowedRoles={['admin', 'manager']}><AlumnosPage /></ProtectedRoute>
+          } />
+          <Route path="/rutinas" element={
+            <ProtectedRoute allowedRoles={['admin', 'manager', 'profesor']}><RutinasPage /></ProtectedRoute>
+          } />
+
+          {/* GESTIÓN TÉCNICA (Admin y Manager) */}
+          <Route path="/ejercicios" element={
+            <ProtectedRoute allowedRoles={['admin', 'manager']}><EjerciciosPage /></ProtectedRoute>
+          } />
+
+          {/* SOLO ADMIN */}
+          <Route path="/staff" element={
+            <ProtectedRoute allowedRoles={['admin']}><UsuariosPage /></ProtectedRoute>
+          } />
+          <Route path="/log-actividad" element={
+            <ProtectedRoute allowedRoles={['admin']}><LogActividadPage /></ProtectedRoute>
+          } />
+          <Route path="/super-admin" element={
+            <ProtectedRoute allowedRoles={['admin']}><SuperAdminPage /></ProtectedRoute>
+          } />
           <Route 
             path="/analytics" 
             element={
-              <ProtectedRoute requireFeature="analyticsEnabled">
+              <ProtectedRoute allowedRoles={['admin']} requireFeature="analyticsEnabled">
                 <AnalyticsPage />
               </ProtectedRoute>
             } 
           />
 
-          <Route path="/config" element={<ProtectedRoute><PlaceholderPage title="Configuración" /></ProtectedRoute>} />
+          <Route path="/config" element={<ProtectedRoute allowedRoles={['admin']}><PlaceholderPage title="Configuración" /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

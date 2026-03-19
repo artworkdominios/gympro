@@ -10,7 +10,7 @@ import { db } from '../lib/firebase';
 const AuthContext = createContext(null);
 
 export const ROLES = {
-  ADMINISTRADOR: 'administrador',
+  ADMIN: 'admin',
   MANAGER: 'manager',
   PROFESOR: 'profesor',
   ALUMNO: 'alumno',
@@ -20,123 +20,149 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // Settings de diseño/colores (tu lógica anterior)
   const [appSettings, setAppSettings] = useState({ notificationsEnabled: true, timerEnabled: true });
-  
-  // NUEVO: Estado global de Features (los interruptores maestros)
   const [features, setFeatures] = useState({
     analyticsEnabled: false,
     timerEnabled: false,
     temporizadorEnabled: false,
-    notificacionesCuotaEnabled: false
+    notificacionesCuotaEnabled: false,
+    aptoMedicoEnabled: false 
   });
 
-  // 1. Escuchar configuraciones globales (global y features)
-  useEffect(() => {
-    // Escucha configuraciones de diseño
-    const unsubSettings = onSnapshot(doc(db, "configuracion", "global"), (doc) => {
-      if (doc.exists()) setAppSettings(doc.data());
-    });
+  // 1. Listeners de Configuración
+  // 1. Listeners de Configuración (Mejorado para evitar errores 400)
+useEffect(() => {
+  let unsubSettings = () => {};
+  let unsubFeatures = () => {};
 
-    // ESCUCHA DE FEATURES (INTERRUPTORES)
-    const unsubFeatures = onSnapshot(doc(db, "configuracion", "features"), (doc) => {
-      if (doc.exists()) {
-        setFeatures(doc.data());
+  try {
+    unsubSettings = onSnapshot(doc(db, "configuracion", "global"), 
+      (docSnap) => { if (docSnap.exists()) setAppSettings(docSnap.data()); },
+      (err) => console.warn("Esperando permisos de settings...")
+    );
+
+    unsubFeatures = onSnapshot(doc(db, "configuracion", "features"), 
+      (docSnap) => { if (docSnap.exists()) setFeatures(docSnap.data()); },
+      (err) => console.warn("Esperando permisos de features...")
+    );
+  } catch (e) {
+    console.error("Error inicializando listeners:", e);
+  }
+
+  return () => { unsubSettings(); unsubFeatures(); };
+}, []);
+
+  // 2. Función de Cálculo Genérica
+  const calcularDiasDiferencia = (fechaString) => {
+    if (!fechaString) return null;
+    try {
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0); 
+      
+      const fechaDestino = new Date(fechaString);
+      // Compensación de zona horaria para evitar errores de "un día antes"
+      fechaDestino.setMinutes(fechaDestino.getMinutes() + fechaDestino.getTimezoneOffset());
+      fechaDestino.setHours(0, 0, 0, 0);
+      
+      const diferenciaEnMilisegundos = fechaDestino.getTime() - hoy.getTime();
+      return Math.ceil(diferenciaEnMilisegundos / (1000 * 60 * 60 * 24));
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // 3. Listener Realtime del Usuario
+  useEffect(() => {
+    let unsubUserDoc = null;
+
+    const unsubscribeAuth = subscribeToAuthChanges((firebaseUser) => {
+      if (firebaseUser) {
+        unsubUserDoc = onSnapshot(doc(db, "users", firebaseUser.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            
+            let finalRole = data.role?.toLowerCase().trim() || ROLES.ALUMNO;
+            if (finalRole === 'administrador') finalRole = ROLES.ADMIN;
+
+            // Cálculos de Cuota
+            const diasCuota = calcularDiasDiferencia(data.fecha_vencimiento) ?? 0;
+            const cuotaVencida = diasCuota <= 0 && finalRole === ROLES.ALUMNO;
+
+            // CORRECCIÓN: Usamos "fecha_apto" y separamos estados
+            const diasApto = calcularDiasDiferencia(data.fecha_apto);
+            const aptoVencido = (diasApto !== null && diasApto <= 0) && finalRole === ROLES.ALUMNO;
+            const aptoFaltante = (diasApto === null) && finalRole === ROLES.ALUMNO;
+
+            setUser({
+              ...firebaseUser,
+              ...data,
+              uid: firebaseUser.uid,
+              role: finalRole,
+              diasParaVencer: diasCuota,
+              isVencido: cuotaVencida,
+              diasApto: diasApto,      
+              isAptoVencido: aptoVencido,
+              isAptoFaltante: aptoFaltante 
+            });
+            
+            setLoading(false);
+          } else {
+            setLoading(false);
+          }
+        });
+      } else {
+        if (unsubUserDoc) unsubUserDoc();
+        setUser(null);
+        setLoading(false);
       }
     });
 
     return () => {
-      unsubSettings();
-      unsubFeatures();
+      unsubscribeAuth();
+      if (unsubUserDoc) unsubUserDoc();
     };
-  }, []);
-
-  // 2. Lógica de Autenticación
-  useEffect(() => {
-    const unsubscribe = subscribeToAuthChanges((firebaseUser, userRole, data) => {
-      if (firebaseUser) {
-        let diasParaVencer = null;
-        if (data?.fecha_vencimiento) {
-          const hoy = new Date();
-          const vto = new Date(data.fecha_vencimiento);
-          const diffTime = vto - hoy;
-          diasParaVencer = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        }
-
-        setUser({
-          ...firebaseUser,
-          role: userRole || 'alumno',
-          ...data,
-          diasParaVencer 
-        });
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
-      setError(null);
-    });
-
-    return () => unsubscribe();
   }, []);
 
   const signIn = async (email, password) => {
     setError(null);
     setLoading(true);
     try {
-      const result = await authSignIn(email, password);
-      setUser({
-        ...result.user,
-        role: result.role,
-        ...result.userData
-      });
-      return result;
+      return await authSignIn(email, password);
     } catch (err) {
       setError(err.message || 'Error al iniciar sesión');
       throw err;
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
-  const signOut = async () => {
+  const logout = async () => {
     setLoading(true);
-    try {
-      await authSignOut();
-      setUser(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const hasRole = (...allowedRoles) => {
-    if (!user?.role) return false;
-    const normalizedRole = user.role.toLowerCase().trim();
-    return allowedRoles.some(r => r.toLowerCase() === normalizedRole || (r === 'admin' && normalizedRole === 'administrador'));
+    try { await authSignOut(); setUser(null); } 
+    catch (err) { setError(err.message); } 
+    finally { setLoading(false); }
   };
 
   const value = {
     user,
+    isVencido: user?.isVencido || false, 
+    isAptoVencido: user?.isAptoVencido || false,
+    isAptoFaltante: user?.isAptoFaltante || false, 
     role: user?.role,
     loading,
     error,
     signIn,
-    logout: signOut,
-    hasRole,
+    logout,
     isAuthenticated: !!user,
     settings: appSettings,
-    features, // EXPORTAMOS LAS FEATURES AQUÍ
+    features,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth debe usarse dentro de AuthProvider');
-  }
-  return context;
+  return useContext(AuthContext);
 }

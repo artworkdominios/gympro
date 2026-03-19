@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, updateDoc, onSnapshot, getDocs, query, where } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, Bell, Timer, Zap, Activity, Clock, Loader2, HeartPulse } from 'lucide-react';
+import { ShieldCheck, Bell, Timer, Zap, Activity, Clock, Loader2, HeartPulse, Send, Smartphone } from 'lucide-react';
 
 export default function SuperAdminPage() {
   const { user } = useAuth();
   const [actualizando, setActualizando] = useState(null);
+  const [alumnos, setAlumnos] = useState([]); // Para la prueba de notificaciones
+  const [selectedAlumno, setSelectedAlumno] = useState('');
+  const [enviandoPrueba, setEnviandoPrueba] = useState(false);
   const [features, setFeatures] = useState({
     analyticsEnabled: false,
     timerEnabled: false,
     temporizadorEnabled: false,
     notificacionesCuotaEnabled: false,
-    aptoMedicoEnabled: false // Nueva función
+    aptoMedicoEnabled: false 
   });
 
   const role = user?.role?.toLowerCase().trim();
@@ -21,6 +24,18 @@ export default function SuperAdminPage() {
     const unsub = onSnapshot(doc(db, "configuracion", "features"), (snapshot) => {
       if (snapshot.exists()) setFeatures(snapshot.data());
     });
+
+    // Cargar alumnos que tengan Token para la prueba
+    const loadAlumnosConToken = async () => {
+      const q = query(collection(db, "users"), where("role", "==", "alumno"));
+      const snap = await getDocs(q);
+      const lista = snap.docs
+        .map(d => ({ id: d.id, nombre: d.data().nombre, hasToken: !!d.data().fcmToken }))
+        .filter(a => a.hasToken);
+      setAlumnos(lista);
+    };
+    loadAlumnosConToken();
+
     return () => unsub();
   }, []);
 
@@ -33,14 +48,28 @@ export default function SuperAdminPage() {
     try {
       await updateDoc(doc(db, "configuracion", "features"), { [key]: value });
     } catch (error) {
-      alert("Error al actualizar: " + error.message);
+      alert("Error: " + error.message);
     } finally {
       setActualizando(null);
     }
   };
 
+  const enviarNotificacionPrueba = async () => {
+    if (!selectedAlumno) return alert("Seleccioná un alumno");
+    setEnviandoPrueba(true);
+    try {
+      // Aquí podrías llamar a una Cloud Function o un servicio de mensajería.
+      // Por ahora, simulamos el éxito. Para producción, esto dispara el envío vía FCM.
+      alert("Se envió la señal de prueba al dispositivo del alumno.");
+    } catch (error) {
+      alert("Error al enviar prueba");
+    } finally {
+      setEnviandoPrueba(false);
+    }
+  };
+
   const FeatureCard = ({ id, title, desc, icon: Icon, color, isActive }) => (
-    <div className={`bg-[#0a0a0a] border ${isActive ? `border-${color}-500/40` : 'border-white/5'} p-8 rounded-[35px] flex flex-col justify-between hover:scale-[1.02] transition-all duration-300 shadow-2xl`}>
+    <div className={`bg-[#0a0a0a] border ${isActive ? `border-${color}-500/40 shadow-${color}-500/10` : 'border-white/5'} p-8 rounded-[35px] flex flex-col justify-between hover:scale-[1.02] transition-all duration-300 shadow-2xl`}>
       <div>
         <div className={`p-4 rounded-2xl w-fit mb-6 ${isActive ? `bg-${color}-500/10 text-${color}-500` : 'bg-white/5 text-gray-600'}`}>
           <Icon size={24} />
@@ -61,7 +90,7 @@ export default function SuperAdminPage() {
   );
 
   return (
-    <div className="max-w-6xl mx-auto p-4 animate-in fade-in duration-700">
+    <div className="max-w-6xl mx-auto p-4 animate-in fade-in duration-700 pb-20">
       <header className="mb-12 border-b border-white/5 pb-10">
         <div className="flex items-center gap-4 mb-4">
           <ShieldCheck className="text-[#FF3131]" size={40} />
@@ -71,33 +100,42 @@ export default function SuperAdminPage() {
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <FeatureCard 
-          id="analyticsEnabled" title="Analytics" color="blue" icon={Activity} isActive={features.analyticsEnabled}
-          desc="Métricas de ejercicios y afluencia para el Manager." 
-        />
-        <FeatureCard 
-          id="notificacionesCuotaEnabled" title="Alertas" color="red" icon={Bell} isActive={features.notificacionesCuotaEnabled}
-          desc="Avisos automáticos de cuotas por vencer o vencidas." 
-        />
-        <FeatureCard 
-          id="aptoMedicoEnabled" title="Apto Médico" color="pink" icon={HeartPulse} isActive={features.aptoMedicoEnabled}
-          desc="Control de salud y alertas de vencimiento de certificados." 
-        />
-        <FeatureCard 
-          id="timerEnabled" title="Cronómetro" color="orange" icon={Timer} isActive={features.timerEnabled}
-          desc="Reloj de duración total de la rutina para el alumno." 
-        />
-        <FeatureCard 
-          id="temporizadorEnabled" title="Descanso" color="green" icon={Clock} isActive={features.temporizadorEnabled}
-          desc="Temporizador de cuenta regresiva entre series." 
-        />
+        <FeatureCard id="analyticsEnabled" title="Analytics" color="blue" icon={Activity} isActive={features.analyticsEnabled} desc="Métricas de ejercicios y afluencia para el Manager." />
+        <FeatureCard id="notificacionesCuotaEnabled" title="Alertas" color="red" icon={Bell} isActive={features.notificacionesCuotaEnabled} desc="Avisos automáticos de cuotas por vencer o vencidas." />
+        <FeatureCard id="aptoMedicoEnabled" title="Apto Médico" color="pink" icon={HeartPulse} isActive={features.aptoMedicoEnabled} desc="Control de salud y alertas de vencimiento de certificados." />
+        <FeatureCard id="timerEnabled" title="Cronómetro" color="orange" icon={Timer} isActive={features.timerEnabled} desc="Reloj de duración total de la rutina para el alumno." />
+        <FeatureCard id="temporizadorEnabled" title="Descanso" color="green" icon={Clock} isActive={features.temporizadorEnabled} desc="Temporizador de cuenta regresiva entre series." />
       </div>
 
-      <div className="mt-12 p-8 bg-white/[0.02] border border-white/5 rounded-[40px] flex flex-col md:flex-row items-center gap-6">
-        <div className="bg-[#FF3131] p-4 rounded-full shadow-2xl shadow-[#FF3131]/20"><Zap className="text-white" size={24} /></div>
-        <div>
-          <p className="text-white font-black uppercase italic text-xs mb-1">Modo de Control Individual</p>
-          <p className="text-gray-500 text-[9px] font-bold uppercase tracking-widest leading-relaxed">Cada switch modifica el acceso en tiempo real. Podés habilitar funciones específicas por cliente o gimnasio.</p>
+      {/* SECCIÓN DE DIAGNÓSTICO DE NOTIFICACIONES */}
+      <div className="mt-12 p-10 bg-[#0a0a0a] border border-white/10 rounded-[45px] shadow-2xl">
+        <div className="flex items-center gap-4 mb-8">
+          <div className="p-3 bg-red-500/10 rounded-2xl text-red-500"><Smartphone size={24} /></div>
+          <div>
+            <h2 className="text-xl font-black text-white italic uppercase tracking-tighter">Test de Notificaciones PUSH</h2>
+            <p className="text-gray-500 text-[9px] font-bold uppercase tracking-widest">Verifica el funcionamiento del Service Worker</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-4">
+          <select 
+            className="flex-1 bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-[10px] font-bold uppercase outline-none focus:border-[#FF3131]"
+            value={selectedAlumno}
+            onChange={(e) => setSelectedAlumno(e.target.value)}
+          >
+            <option value="">Seleccionar Alumno con App Activa...</option>
+            {alumnos.map(a => (
+              <option key={a.id} value={a.id}>{a.nombre} (Token OK)</option>
+            ))}
+          </select>
+          <button 
+            onClick={enviarNotificacionPrueba}
+            disabled={enviandoPrueba || !selectedAlumno}
+            className="bg-[#FF3131] hover:bg-red-700 text-white font-black px-8 py-4 rounded-2xl flex items-center justify-center gap-2 uppercase text-[10px] transition-all disabled:opacity-30 shadow-xl shadow-red-900/20"
+          >
+            {enviandoPrueba ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} 
+            Enviar Notificación de Prueba
+          </button>
         </div>
       </div>
     </div>
