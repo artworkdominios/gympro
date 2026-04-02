@@ -128,6 +128,8 @@ export default function RutinasPage() {
     if (window.confirm("¿Eliminar esta rutina permanentemente?")) {
       try {
         await deleteDoc(doc(db, "rutinas", id));
+        // Actualiza estado local inmediatamente
+  setHistorialRutinas(prev => prev.filter(r => r.id !== id));
       } catch (e) {
         alert("Error: " + e.message);
       }
@@ -152,10 +154,25 @@ export default function RutinasPage() {
       setBloques(nuevosBloques);
     }
   };
+  
   const guardarNuevaRutina = async () => {
     const tieneEjercicios = bloques.some(b => b.ejercicios.length > 0);
-    if (!tieneEjercicios || !alumnoSeleccionado) return;
     
+    // VALIDACIONES
+    if (!alumnoSeleccionado) {
+      alert("Debes seleccionar un alumno primero.");
+      return;
+    }
+    if (!tieneEjercicios) {
+      alert("La rutina debe tener al menos un ejercicio.");
+      return;
+    }
+    // VALIDACIÓN OBLIGATORIA
+    if (!fechaVencimiento) {
+      alert("POR FAVOR, SELECCIONÁ UNA FECHA DE VENCIMIENTO PARA LA RUTINA.");
+      return;
+    }
+  
     setLoading(true);
     try {
       await addDoc(collection(db, "rutinas"), {
@@ -163,17 +180,24 @@ export default function RutinasPage() {
         profesorId: user.uid,
         nombreProfesor: user.nombre || 'Staff QST',
         fecha: new Date().toISOString(),
-        vencimiento: fechaVencimiento, // GUARDADO EN FIREBASE
+        vencimiento: fechaVencimiento, // Se guarda como "YYYY-MM-DD"
         bloques: bloques,
         createdAt: serverTimestamp()
       });
+      
+      // Resetear estados tras éxito
       setBloques([{ nombreDia: 'Día 1', ejercicios: [] }]);
+      // Opcional: resetear la fecha a los próximos 30 días
+      const d = new Date();
+      d.setDate(d.getDate() + 30);
+      setFechaVencimiento(d.toISOString().split('T')[0]);
+      
       setLoading(false);
       setShowSuccessModal(true);
       setTimeout(() => setShowSuccessModal(false), 3000);
     } catch (e) {
       setLoading(false);
-      alert("Error: " + e.message);
+      alert("Error al guardar: " + e.message);
     }
   };
 

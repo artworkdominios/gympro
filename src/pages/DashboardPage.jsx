@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import { Users, Shield, Flame, CalendarCheck, CreditCard, AlertTriangle, Activity, X, Search, ChevronRight, BarChart3, HeartPulse } from 'lucide-react';
+import { Users, Shield, Flame, Calendar, CalendarCheck, CreditCard, AlertTriangle, Activity, X, Search, ChevronRight, BarChart3, HeartPulse } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user, features, isVencido, isAptoVencido } = useAuth();
@@ -16,6 +16,34 @@ export default function DashboardPage() {
   const [busquedaModal, setBusquedaModal] = useState('');
 
   const role = user?.role?.toLowerCase().trim() || '';
+
+  // 1. Agregá el estado al principio del componente
+  const [ultimaRutina, setUltimaRutina] = useState(null);
+
+  // 2. Agregá el efecto de carga
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    // IMPORTANTE: Asegurate de importar 'query', 'collection', 'where', 'orderBy', 'limit' y 'onSnapshot' de firebase/firestore
+    const q = query(
+      collection(db, "rutinas"),
+      where("alumnoId", "==", user.uid),
+      orderBy("createdAt", "desc"),
+      limit(1)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      if (!snap.empty) {
+        setUltimaRutina(snap.docs[0].data());
+      } else {
+        setUltimaRutina(null);
+      }
+    }, (error) => {
+      console.error("Error en Dashboard Rutina:", error);
+    });
+
+    return () => unsub();
+  }, [user?.uid]);
 
   // 1. Lógica para Admin / Manager
   useEffect(() => {
@@ -223,15 +251,59 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-4">
                   <CreditCard className={user.diasParaVencer <= 3 ? 'text-red-500' : 'text-green-500'} size={20} />
                   <div>
-                    <p className="text-[10px] font-black uppercase text-gray-500">Membresía</p>
+                    <p className="text-[10px] font-black uppercase text-gray-500">Cuota</p>
                     <p className="text-white text-[12px] font-black uppercase italic">
-                      {isVencido ? 'MEMBRESÍA VENCIDA' : `VENCE EN ${user.diasParaVencer} DÍAS`}
+                      {isVencido ? 'CUOTA VENCIDA' : `VENCE EN ${user.diasParaVencer} DÍAS`}
                     </p>
                   </div>
                 </div>
                 {user.diasParaVencer <= 3 && <AlertTriangle size={18} className="text-red-500 animate-bounce" />}
               </div>
             )}
+
+{/* C. CARTEL DE VENCIMIENTO DE PLAN */}
+{ultimaRutina && ultimaRutina.vencimiento ? (() => {
+  // 1. Validamos que la fecha sea transformable a objeto Date
+  const fechaVenc = new Date(ultimaRutina.vencimiento + 'T00:00:00');
+  const hoy = new Date();
+  const esVencida = fechaVenc < hoy;
+
+  return (
+    <div className={`p-4 rounded-3xl border flex items-center gap-4 transition-all duration-500 mb-4
+      ${esVencida ? 'bg-orange-500/10 border-orange-500/50' : 'bg-[#0a0a0a] border-white/5'}`}>
+      
+      <div className="bg-white/5 p-2 rounded-xl text-[#FF3131]">
+        <Calendar size={20} />
+      </div>
+      
+      <div className="flex-1">
+        <p className="text-gray-500 font-black text-[12px] uppercase tracking-tighter">Tu Rutina</p>
+        <p className="text-white font-black text-[12px] uppercase italic leading-tight">
+          {esVencida 
+            ? "RUTINA VENCIDA" 
+            : `VENCE EL ${fechaVenc.toLocaleDateString('es-AR')}`}
+        </p>
+      </div>
+
+      <div className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase italic ${
+        esVencida ? 'bg-[#FF3131] text-white animate-pulse' : 'bg-white/10 text-gray-400'
+      }`}>
+        {esVencida ? 'Pedir Nueva' : 'Al Día'}
+      </div>
+    </div>
+  );
+})() : (
+  /* Si no hay rutina o no tiene fecha, mostramos un estado neutro */
+  <div className="p-4 bg-[#0a0a0a] border border-dashed border-white/5 rounded-3xl flex items-center gap-3 mb-4 opacity-50">
+    <div className="p-2 bg-white/5 rounded-xl text-gray-700">
+      <Calendar size={20} />
+    </div>
+    <p className="text-gray-600 font-black text-[9px] uppercase italic tracking-widest">
+      Sin plan asignado actualmente
+    </p>
+  </div>
+)}
+
           </div>
 
 

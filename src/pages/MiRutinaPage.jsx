@@ -146,7 +146,7 @@ export default function MiRutinaPage() {
             <div>
               <p className="text-white font-black text-[9px] uppercase">Cuota de Gimnasio</p>
               <p className="text-[#FF3131] font-bold text-[8px] uppercase italic">
-                {user.diasParaVencer <= 0 ? "TU MEMBRESÍA HA VENCIDO" : `VENCE EN ${user.diasParaVencer} DÍAS`}
+                {user.diasParaVencer <= 0 ? "TU CUOTA ESTA VENCIDA" : `VENCE EN ${user.diasParaVencer} DÍAS`}
               </p>
             </div>
           </div>
@@ -174,7 +174,7 @@ export default function MiRutinaPage() {
         </h1>
         <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mt-2 flex items-center gap-2">
       <span className="h-1 w-4 bg-[#FF3131]"></span>
-      Rutina creada por: <span className="text-white italic">{rutina.nombreProfesor}</span>
+      Rutina creada por: <span className="text-white italic">{rutina?.nombreProfesor || '—'}</span>
     </p>
         
         {features.timerEnabled && (

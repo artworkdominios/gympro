@@ -28,7 +28,7 @@ export default function PerfilPage() {
               </div>
               <div>
                 <p className="text-white font-black uppercase italic text-sm">
-                  {dias <= 0 ? 'MEMBRESÍA VENCIDA' : `MEMBRESÍA ACTIVA`}
+                  {dias <= 0 ? 'CUOTA VENCIDA' : `CUOTA ACTIVA`}
                 </p>
                 <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest">
                   Vence: {user?.fecha_vencimiento || 'No registrada'}

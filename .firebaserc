@@ -2,6 +2,14 @@
   "projects": {
     "default": "qstgympro"
   },
-  "targets": {},
+  "targets": {
+    "qstgympro": {
+      "hosting": {
+        "principal": [
+          "app.qst-gym.com"
+        ]
+      }
+    }
+  },
   "etags": {}
 }

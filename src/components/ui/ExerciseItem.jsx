@@ -23,10 +23,11 @@ export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onEx
 
   const embedUrl = getEmbedUrl(videoUrl);
 
+  // Efecto principal: corre el contador y detecta cuando llega a 0
   useEffect(() => {
     let interval;
     if (isRunning && timeLeft > 0) {
-      setIsFinished(false); 
+      setIsFinished(false);
       interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
     } else if (timeLeft === 0 && isRunning) {
       setIsRunning(false);
@@ -36,10 +37,21 @@ export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onEx
     return () => clearInterval(interval);
   }, [isRunning, timeLeft]);
 
+  // Efecto de reset: espera 5 segundos después de finalizar y vuelve al inicio
   useEffect(() => {
-    if (!isRunning) {
-      setTimeLeft(parseInt(d) || 60);
+    if (!isFinished) return;
+    const timeout = setTimeout(() => {
       setIsFinished(false);
+      setTimeLeft(parseInt(d) || 60);
+      setIsRunning(false);
+    }, 5000);
+    return () => clearTimeout(timeout);
+  }, [isFinished, d]);
+
+  // Efecto de sincronización: resetea el tiempo si cambia la duración o el ejercicio
+  useEffect(() => {
+    if (!isRunning && !isFinished) {
+      setTimeLeft(parseInt(d) || 60);
     }
   }, [d, isOpen]);
 
@@ -133,17 +145,17 @@ export default function ExerciseItem({ ejercicio, isDone, isOpen, onToggle, onEx
             {showRestTimer && (
               <div
                 onClick={handleTimerClick}
-                className={`p-2 text-xl rounded-2xl text-center border transition-all duration-500 flex flex-col justify-center min-h-[50px] relative group/timer ${
+                className={`p-1 text-xl rounded-2xl text-center border transition-all duration-500 flex flex-col justify-center min-h-[50px] relative group/timer ${
                   isFinished ? 'bg-[#31FF31] border-[#31FF31] shadow-[0_0_20px_rgba(49,255,49,0.4)]' 
                   : isRunning ? 'bg-[#FF3131] border-[#FF3131] shadow-[0_0_15px_rgba(255,49,49,0.4)]' 
                   : 'bg-white/5 border-white/5'
                 }`}
               >
-                <p className={`${(isRunning || isFinished) ? 'text-black' : 'text-gray-600'} text-[16px] font-black mb-0.5 uppercase`}>
+                <p className={`${(isRunning || isFinished) ? 'text-black' : 'text-gray-600'} text-[14px] font-bold mb-0.5 uppercase tracking-tighter`}>
                   {isFinished ? '¡LISTO!' : isRunning ? 'REST' : 'TIMER'}
                 </p>
-                <p className={`${(isRunning || isFinished) ? 'text-black' : 'text-white'} font-black text-[16px] leading-tight`}>
-                  {isFinished ? 'CONTINUÁ' : `${timeLeft}s`}
+                <p className={`${(isRunning || isFinished) ? 'text-black' : 'text-white'} font-bold leading-none text-[12px] leading-tight`}>
+                  {isFinished ? 'Continuá' : `${timeLeft}s`}
                 </p>
                 <button onClick={handleReset} className="absolute -top-1 -right-1 bg-white text-black rounded-full p-1 opacity-0 group-hover/timer:opacity-100 transition-opacity">
                   <RotateCcw size={8} />

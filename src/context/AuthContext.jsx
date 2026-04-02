@@ -156,9 +156,20 @@ useEffect(() => {
     features,
   };
 
+  if (loading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-black gap-4">
+        <img src="/logo192.png" alt="QST GYM" className="w-16 h-16 animate-pulse" />
+        <p className="text-white font-black text-[10px] uppercase tracking-widest animate-pulse">
+          Cargando QST GYM...
+        </p>
+      </div>
+    );
+  }
+
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 }

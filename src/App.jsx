@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
+import UpdatePrompt from './components/UpdatePrompt.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import AlumnosPage from './pages/AlumnosPage.jsx';
@@ -74,6 +75,7 @@ const PlaceholderPage = ({ title }) => (
 export default function App() {
   return (
     <BrowserRouter>
+      <UpdatePrompt />
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
